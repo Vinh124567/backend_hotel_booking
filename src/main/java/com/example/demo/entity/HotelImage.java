@@ -23,9 +23,8 @@ public class HotelImage {
     @JsonBackReference
     private Hotel hotel;
 
-    @Column(name = "image_url", nullable = false)
+    @Column(name = "image_url", nullable = false, columnDefinition = "TEXT")
     private String imageUrl;
-
     @Column(name = "caption")
     private String caption;
 

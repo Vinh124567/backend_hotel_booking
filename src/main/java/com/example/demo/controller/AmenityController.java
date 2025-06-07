@@ -1,11 +1,15 @@
 package com.example.demo.controller;
+
 import com.example.demo.dto.amenity.AmenityRequest;
+import com.example.demo.dto.amenity.AmenityResponse;
 import com.example.demo.response.ApiResponse;
 import com.example.demo.service.amenity.AmenityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("api/v1/amenity")
@@ -43,6 +47,15 @@ public class AmenityController {
         response.setResult("Xóa tiện nghi thành công");
         response.setCode(HttpStatus.OK.value());
 
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    @GetMapping("/hotel/{hotelId}")
+    public ResponseEntity<?> getAmenitiesByHotelId(@PathVariable Long hotelId) {
+        List<AmenityResponse> amenities = amenityService.getAmenitiesByHotelId(hotelId);
+        ApiResponse<List<AmenityResponse>> response = new ApiResponse<>();
+        response.setResult(amenities);
+        response.setCode(HttpStatus.OK.value());
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 }

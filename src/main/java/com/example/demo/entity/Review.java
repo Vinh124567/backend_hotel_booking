@@ -1,17 +1,18 @@
 package com.example.demo.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Entity
 @Table(name = "reviews")
 public class Review {
@@ -19,18 +20,22 @@ public class Review {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "review_id")
+    @EqualsAndHashCode.Include
     private Long id;
 
     @OneToOne
     @JoinColumn(name = "booking_id")
+    @ToString.Exclude
     private Booking booking;
 
     @ManyToOne
     @JoinColumn(name = "user_id")
+    @ToString.Exclude
     private User user;
 
     @ManyToOne
     @JoinColumn(name = "hotel_id")
+    @ToString.Exclude
     private Hotel hotel;
 
     @Column(name = "rating", nullable = false, precision = 2, scale = 1)
@@ -61,5 +66,6 @@ public class Review {
     private Boolean isApproved = false;
 
     @OneToMany(mappedBy = "review", cascade = CascadeType.ALL)
+    @ToString.Exclude
     private Set<ReviewImage> images = new HashSet<>();
 }

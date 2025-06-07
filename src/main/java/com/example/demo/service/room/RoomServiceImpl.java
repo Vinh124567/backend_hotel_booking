@@ -1,18 +1,13 @@
 package com.example.demo.service.room;
 
 import com.example.demo.dto.room.RoomRequest;
-
-
 import com.example.demo.dto.room.RoomResponse;
 import com.example.demo.entity.Room;
 import com.example.demo.entity.RoomType;
 import com.example.demo.repository.RoomRepository;
-
 import com.example.demo.repository.RoomTypeRepository;
-import com.example.demo.service.room.RoomService;
 
 import lombok.AllArgsConstructor;
-
 import org.modelmapper.ModelMapper;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -25,8 +20,6 @@ import java.util.stream.Collectors;
 public class RoomServiceImpl implements RoomService {
     private final RoomRepository roomRepository;
     private final RoomTypeRepository roomTypeRepository;
-
-
     private final ModelMapper modelMapper;
 
     @Override
@@ -67,23 +60,45 @@ public class RoomServiceImpl implements RoomService {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Room not found with ID: " + id));
 
-        modelMapper.typeMap(Room.class, RoomResponse.class).addMappings(mapper ->
-                mapper.map(src -> src.getRoomType().getTypeName(), RoomResponse::setRoomTypeName)
-        );
-
-        return modelMapper.map(room, RoomResponse.class);
+        return convertToResponse(room);
     }
 
     @Override
     public List<RoomResponse> getAllRooms() {
-        modelMapper.typeMap(Room.class, RoomResponse.class).addMappings(mapper ->
-                mapper.map(src -> src.getRoomType().getTypeName(), RoomResponse::setRoomTypeName)
-        );
-
         return roomRepository.findAll()
                 .stream()
-                .map(room -> modelMapper.map(room, RoomResponse.class))
+                .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<RoomResponse> getRoomsByRoomTypeId(Long roomTypeId) {
+        // Kiểm tra room type có tồn tại không
+        roomTypeRepository.findById(roomTypeId)
+                .orElseThrow(() -> new RuntimeException("RoomType không tồn tại với ID: " + roomTypeId));
+
+        // Lấy danh sách phòng theo room type ID
+        List<Room> rooms = roomRepository.findByRoomType_Id(roomTypeId);
+
+        // Convert sang DTO
+        return rooms.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+    }
+
+    // Helper method để convert Room entity sang RoomResponse DTO
+    private RoomResponse convertToResponse(Room room) {
+        RoomResponse response = modelMapper.map(room, RoomResponse.class);
+
+        // Set room type name
+        response.setRoomTypeName(room.getRoomType().getTypeName());
+
+        // Set room type ID
+        response.setRoomTypeId(room.getRoomType().getId());
+
+        // Set isAvailable based on status
+        response.setIsAvailable("Trống".equals(room.getStatus()));
+
+        return response;
+    }
 }

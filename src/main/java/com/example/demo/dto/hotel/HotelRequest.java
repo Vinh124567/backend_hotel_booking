@@ -1,6 +1,7 @@
 package com.example.demo.dto.hotel;
 
 import com.example.demo.dto.hotel_image.HotelImageRequest;
+import com.example.demo.entity.Hotel;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -28,6 +29,9 @@ public class HotelRequest {
     private List<Long> amenityIds;
 
     private List<HotelImageRequest> images;
+    private Integer distanceToBeach = 0;
+    private String hotelCategory;
+    private Hotel.PropertyType propertyType;
     // private List<RoomTypeRequest> roomTypes;
 
 }

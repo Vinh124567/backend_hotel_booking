@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.location.LocationRequest;
+import com.example.demo.dto.location.LocationResponse;
 import com.example.demo.entity.Location;
 import com.example.demo.response.ApiResponse;
 import com.example.demo.service.location.LocationService;
@@ -30,10 +31,10 @@ public class LocationController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Location>>> getAllLocations() {
-        List<Location> locations = locationService.getAllLocations();
+    public ResponseEntity<ApiResponse<List<LocationResponse>>> getAllLocations() {
+        List<LocationResponse> locations = locationService.getAllLocations();
 
-        ApiResponse<List<Location>> response = new ApiResponse<>();
+        ApiResponse<List<LocationResponse>> response = new ApiResponse<>();
         response.setCode(HttpStatus.OK.value());
         response.setResult(locations);
 

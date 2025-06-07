@@ -41,8 +41,11 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     protected static final String REFRESH_SIGNER_KEY = "R3fr3shT0k3nS1gn3rK3y_S3cur3!@9o75HYyiqLhhK91+pvVoDsJ3p+oRd6n3";
 
     public AuthenticationResponse Authenticate(AuthenticationRequestDTO authenticationRequestDTO) {
-        var admin = authRepository.findByUsername(authenticationRequestDTO.getUsername())
+        // Tìm người dùng theo username hoặc email
+        var admin = authRepository
+                .findByUsernameOrEmail(authenticationRequestDTO.getUsername(), authenticationRequestDTO.getUsername())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
+
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
         boolean authenticated = passwordEncoder.matches(authenticationRequestDTO.getPassword(), admin.getPasswordHash());
         if (!authenticated) {
@@ -52,14 +55,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         var token = generateToken(admin);
         var refreshToken = generateRefreshToken(admin);
 
-        Optional<User> a = authRepository.findByUsername("admin");
-        System.out.println("Authenticated Admin: " + a);
         return AuthenticationResponse.builder()
                 .token(token)
                 .refreshToken(refreshToken)
                 .authenticated(true)
                 .build();
     }
+
 
     private String generateToken(User user) {
         String issuer = System.getProperty("spring.application.name");
@@ -70,9 +72,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .subject(user.getUsername())
                 .issuer(issuer)
                 .issueTime(new Date())
-                .expirationTime(new Date(
-                        Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()
-                ))
+//                .expirationTime(new Date(
+//                        Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()
+//                ))
                 .claim("scope", buildScope(user))
                 .build();
         Payload payload = new Payload(jwtClaimsSet.toJSONObject());

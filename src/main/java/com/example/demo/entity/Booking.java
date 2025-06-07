@@ -1,18 +1,19 @@
 package com.example.demo.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Entity
 @Table(name = "bookings")
 public class Booking {
@@ -20,14 +21,17 @@ public class Booking {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "booking_id")
+    @EqualsAndHashCode.Include
     private Long id;
 
     @ManyToOne
     @JoinColumn(name = "user_id")
+    @ToString.Exclude
     private User user;
 
     @ManyToOne
     @JoinColumn(name = "room_type_id")
+    @ToString.Exclude
     private RoomType roomType;
 
     @Column(name = "check_in_date", nullable = false)
@@ -53,25 +57,32 @@ public class Booking {
 
     @ManyToOne
     @JoinColumn(name = "cancellation_policy_id")
+    @ToString.Exclude
     private CancellationPolicy cancellationPolicy;
 
     @ManyToOne
     @JoinColumn(name = "assigned_room_id")
+    @ToString.Exclude
     private Room assignedRoom;
 
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL)
+    @ToString.Exclude
     private Set<GuestInformation> guestInformation = new HashSet<>();
 
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL)
+    @ToString.Exclude
     private Set<Payment> payments = new HashSet<>();
 
     @OneToOne(mappedBy = "booking", cascade = CascadeType.ALL)
+    @ToString.Exclude
     private Review review;
 
     @OneToMany(mappedBy = "relatedBooking", cascade = CascadeType.ALL)
+    @ToString.Exclude
     private Set<Notification> notifications = new HashSet<>();
 
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL)
+    @ToString.Exclude
     private Set<PromotionUsage> promotionUsages = new HashSet<>();
 
     @PrePersist

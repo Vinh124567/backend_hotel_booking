@@ -37,4 +37,7 @@ public class Location {
 
     @OneToMany(mappedBy = "location", cascade = CascadeType.ALL)
     private Set<Hotel> hotels = new HashSet<>();
+
+    @Embedded
+    private Position position;
 }

@@ -22,6 +22,23 @@ import java.util.Set;
 @Table(name = "hotels")
 public class Hotel {
 
+    // Enum cho loại hình khách sạn để hiển thị theo tab
+    public enum PropertyType {
+        HOTEL("Hotels"),
+        VILLA("Villas"),
+        APARTMENT("Apartments");
+
+        private final String displayName;
+
+        PropertyType(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "hotel_id")
@@ -77,6 +94,11 @@ public class Hotel {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    // Thêm thuộc tính propertyType để phân loại theo tab
+    @Enumerated(EnumType.STRING)
+    @Column(name = "property_type")
+    private PropertyType propertyType = PropertyType.HOTEL; // Mặc định là HOTEL
+
     @OneToMany(mappedBy = "hotel", cascade = CascadeType.ALL)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
@@ -122,4 +144,10 @@ public class Hotel {
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
+
+    @Column(name = "distance_to_beach")
+    private Integer distanceToBeach; // Khoảng cách đến biển tính bằng mét
+
+    @Column(name = "hotel_category")
+    private String hotelCategory; // BEACHFRONT, LUXURY, BEST_RATED, DEAL
 }

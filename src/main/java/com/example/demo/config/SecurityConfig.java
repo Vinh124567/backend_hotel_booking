@@ -34,7 +34,21 @@ public class SecurityConfig {
 
             // Thông tin voucher công khai
             "/api/v1/voucher/public/**",
-            "api/v1/room/**"
+            "api/v1/room/**",
+
+            // ✅ THÊM PAYMENT PUBLIC ENDPOINTS
+            "/api/v1/payments/health",
+            "/api/v1/payments/*/status",
+            "/api/v1/payments/*/check-momo",
+            "/api/v1/payments/*/test/success",
+            "/api/v1/payments/*/qr",
+            "/api/payments/callback/**",
+            "/api/payments/config/debug"
+    };
+
+    // ✅ PAYMENT ENDPOINTS CẦN AUTHENTICATION NHƯNG KHÔNG CẦN ADMIN
+    private final String[] PAYMENT_ENDPOINTS = {
+            "/api/v1/payments"  // POST create payment - cần auth nhưng không cần admin
     };
 
     // Endpoint cho hình ảnh
@@ -71,6 +85,11 @@ public class SecurityConfig {
             "/api/v1/amenity/**",
             "/api/v1/room-type/**",
             "/api/v1/room-images/**",
+            "/api/v1/reviews/**",
+            "/api/v1/favorites/**",
+            // ❌ XÓA DÒNG NÀY: "/api/v1/payments/**",
+            "/api/v1/payments/admin/**",  // ✅ CHỈ ADMIN PAYMENT ENDPOINTS
+            "/api/v1/bookings/**"
     };
 
     String signerKey = "9o75HYyiqLhhK91+pvVoDsJ3p+oRd6n3iapvj9Hx8uwvcqWIEVDcAgNnz7gG0rTX";
@@ -84,12 +103,22 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
         httpSecurity.authorizeHttpRequests(request ->
                 request
-                        // Cho phép truy cập không xác thực tới các endpoint công khai
+                        // ✅ Cho phép truy cập không xác thực tới các endpoint công khai
                         .requestMatchers(HttpMethod.GET, PUBLIC_ENDPOINTS).permitAll()
+                        .requestMatchers("/api/payments/**").permitAll()
+                        .requestMatchers("/api/v1/payments/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/callback").permitAll() // ✅ MoMo callback
+                        .requestMatchers(HttpMethod.GET, "/api/payments/callback").permitAll()  // ✅ MoMo redirect
                         .requestMatchers(PUBLIC_IMAGE_ENDPOINT).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/**").permitAll()
+                        .requestMatchers("/uploads/**").permitAll()
 
+                        // ✅ Payment endpoints cần auth nhưng không cần admin
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payments").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/payments/*").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/payments/*/status").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/payments/*").hasRole("ADMIN")
 
                         // Yêu cầu vai trò ADMIN cho các endpoint quản trị
                         .requestMatchers(ADMIN_ENDPOINTS).hasRole("ADMIN")
@@ -127,4 +156,3 @@ public class SecurityConfig {
                 .build();
     }
 }
-

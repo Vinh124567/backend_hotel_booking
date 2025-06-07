@@ -9,4 +9,11 @@ public class RoomResponse {
     private String roomNumber;
     private String floor;
     private String status;
+    private Long roomTypeId;
+    private Boolean isAvailable;
+
+    // Getter cho isAvailable (backup method)
+    public Boolean getIsAvailable() {
+        return this.isAvailable != null ? this.isAvailable : "Trống".equals(this.status);
+    }
 }

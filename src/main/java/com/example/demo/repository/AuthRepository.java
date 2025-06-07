@@ -12,7 +12,7 @@ public interface AuthRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
     @Query("SELECT a FROM User a JOIN FETCH a.roles WHERE a.id = :id")
     User findAdminWithRoles(@Param("id") Long id);
-
+    Optional<User> findByUsernameOrEmail(String username, String email);
 
     Boolean existsByUsername(String username);
 }

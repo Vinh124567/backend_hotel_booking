@@ -1,5 +1,6 @@
 package com.example.demo.dto.payment;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,9 +18,29 @@ public class PaymentResponse {
     private String paymentMethod;
     private String paymentStatus;
     private String transactionId;
-    private LocalDateTime paymentDate;
-    private String gateway;
-    private String qrCode;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime paymentDate;    private String gateway;
+
+    // MoMo specific fields
+    private String qrCode;           // QR code URL
+    private String paymentUrl;       // Deep link URL cho mobile app
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime qrExpiryTime;
+    // Optional fields
     private String redirectUrl;
+    private String orderId;          // MoMo order ID
+    private String notes;
+
+    // Helper methods
+    public boolean isPaid() {
+        return "Đã thanh toán".equals(paymentStatus);
+    }
+
+    public boolean isPending() {
+        return "Chờ thanh toán".equals(paymentStatus);
+    }
+
+    public boolean isExpired() {
+        return qrExpiryTime != null && LocalDateTime.now().isAfter(qrExpiryTime);
+    }
 }

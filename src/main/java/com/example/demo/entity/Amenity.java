@@ -1,5 +1,6 @@
 package com.example.demo.entity;
 
+import com.example.demo.enumm.AmenityCategory;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -30,6 +31,18 @@ public class Amenity {
 
     @Column(name = "icon_url")
     private String iconUrl;
+
+    // Sử dụng enum AmenityCategory
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category")
+    private AmenityCategory category;
+
+    // Mã icon cho Flutter (có thể được suy ra từ category)
+    @Column(name = "icon_code")
+    private String iconCode;
+
+    @Column(name = "description", length = 255)
+    private String description;
 
     @ManyToMany(mappedBy = "amenities")
     @ToString.Exclude

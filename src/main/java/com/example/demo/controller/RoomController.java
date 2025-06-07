@@ -1,6 +1,5 @@
 package com.example.demo.controller;
 
-
 import com.example.demo.dto.room.RoomRequest;
 import com.example.demo.dto.room.RoomResponse;
 import com.example.demo.response.ApiResponse;
@@ -24,29 +23,32 @@ public class RoomController {
         roomService.createRoom(request);
 
         ApiResponse<String> response = new ApiResponse<>();
-        response.setResult("Thêm phòng thành công");
-        response.setCode(HttpStatus.OK.value());
+        response.setResult("Tạo phòng thành công");
+        response.setMessage("Thêm phòng mới thành công");
+        response.setCode(HttpStatus.CREATED.value());
 
-        return ResponseEntity.status(HttpStatus.OK).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PutMapping("/update/{id}")
+    @PutMapping("/{id}")
     public ResponseEntity<?> updateRoom(@PathVariable Long id, @RequestBody RoomRequest request) {
         roomService.updateRoom(id, request);
 
         ApiResponse<String> response = new ApiResponse<>();
         response.setResult("Cập nhật phòng thành công");
+        response.setMessage("Cập nhật thông tin phòng thành công");
         response.setCode(HttpStatus.OK.value());
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
-    @DeleteMapping("/delete/{id}")
+    @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteRoom(@PathVariable Long id) {
         roomService.deleteRoom(id);
 
         ApiResponse<String> response = new ApiResponse<>();
         response.setResult("Xóa phòng thành công");
+        response.setMessage("Xóa phòng thành công");
         response.setCode(HttpStatus.OK.value());
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
@@ -58,17 +60,50 @@ public class RoomController {
 
         ApiResponse<RoomResponse> response = new ApiResponse<>();
         response.setResult(room);
+        response.setMessage("Lấy thông tin phòng thành công");
         response.setCode(HttpStatus.OK.value());
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
-    @GetMapping
+    @GetMapping("/all")
     public ResponseEntity<?> getAllRooms() {
         List<RoomResponse> rooms = roomService.getAllRooms();
 
         ApiResponse<List<RoomResponse>> response = new ApiResponse<>();
         response.setResult(rooms);
+        response.setMessage("Lấy danh sách phòng thành công");
+        response.setCode(HttpStatus.OK.value());
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    // API mới - Lấy phòng theo room type ID
+    @GetMapping("/room-type/{roomTypeId}")
+    public ResponseEntity<?> getRoomsByRoomTypeId(@PathVariable Long roomTypeId) {
+        List<RoomResponse> rooms = roomService.getRoomsByRoomTypeId(roomTypeId);
+
+        ApiResponse<List<RoomResponse>> response = new ApiResponse<>();
+        response.setResult(rooms);
+        response.setMessage("Lấy danh sách phòng theo loại phòng thành công");
+        response.setCode(HttpStatus.OK.value());
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    // API bổ sung - Lấy phòng trống theo room type ID
+    @GetMapping("/room-type/{roomTypeId}/available")
+    public ResponseEntity<?> getAvailableRoomsByRoomTypeId(@PathVariable Long roomTypeId) {
+        List<RoomResponse> rooms = roomService.getRoomsByRoomTypeId(roomTypeId);
+
+        // Filter chỉ lấy phòng trống
+        List<RoomResponse> availableRooms = rooms.stream()
+                .filter(room -> Boolean.TRUE.equals(room.getIsAvailable()))
+                .collect(java.util.stream.Collectors.toList());
+
+        ApiResponse<List<RoomResponse>> response = new ApiResponse<>();
+        response.setResult(availableRooms);
+        response.setMessage("Lấy danh sách phòng trống theo loại phòng thành công");
         response.setCode(HttpStatus.OK.value());
 
         return ResponseEntity.status(HttpStatus.OK).body(response);

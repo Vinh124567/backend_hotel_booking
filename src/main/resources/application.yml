@@ -1,0 +1,59 @@
+payment:
+  secret-key: "your-general-payment-secret-key"
+
+  momo:
+    # MoMo Test Environment Credentials
+    partner-code: "MOMO"
+    access-key: "F8BBA842ECF85"
+    secret-key: "K951B6PE1waDMi640xX08PD3vg6EkVlz"
+
+    # MoMo API URLs (Test environment)
+    api-url: "https://test-payment.momo.vn/v2/gateway/api/create"
+    query-url: "https://test-payment.momo.vn/v2/gateway/api/query"
+
+    # ✅ UPDATED với ngrok URL thực tế của bạn
+    callback-url: "https://e7b2-42-114-94-137.ngrok-free.app/api/v1/payments/callback"
+    redirect-url: "https://e7b2-42-114-94-137.ngrok-free.app/api/v1/payments/callback"
+
+    # Request settings
+    request-type: "captureWallet"
+    order-info: "Thanh toán đặt phòng khách sạn"
+    lang: "vi"
+
+    # QR code settings
+    qr-expiry-minutes: 15
+
+    # Retry settings
+    max-retries: 3
+    retry-delay-seconds: 5
+
+---
+# application-prod.yml (Production environment)
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+payment:
+  secret-key: "${PAYMENT_SECRET_KEY}"
+
+  momo:
+    # MoMo Production Credentials (from environment variables)
+    partner-code: "${MOMO_PARTNER_CODE}"
+    access-key: "${MOMO_ACCESS_KEY}"
+    secret-key: "${MOMO_SECRET_KEY}"
+
+    # MoMo Production URLs
+    api-url: "https://payment.momo.vn/v2/gateway/api/create"
+    query-url: "https://payment.momo.vn/v2/gateway/api/query"
+
+    # Production callback URLs
+    callback-url: "${MOMO_CALLBACK_URL}"
+    redirect-url: "${MOMO_REDIRECT_URL}"
+
+    request-type: "captureWallet"
+    order-info: "Thanh toán đặt phòng khách sạn"
+    lang: "vi"
+    qr-expiry-minutes: 15
+    max-retries: 3
+    retry-delay-seconds: 5
