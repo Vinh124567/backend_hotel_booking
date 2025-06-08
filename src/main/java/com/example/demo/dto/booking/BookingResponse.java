@@ -77,12 +77,13 @@ public class BookingResponse {
     private String paymentMethod;
     private LocalDateTime paymentDate;
     private Boolean paymentExpired;
-    // ========== ✅ NEW CALCULATED FIELDS ==========
     private String hotelLocationCity;
     private String hotelLocationDistrict;
     private String primaryHotelImageUrl;
     private Boolean isHotelActive;
     private Hotel.PropertyType hotelPropertyType;
+
+    private Boolean isPaid;            // true/false
 
     // Computed properties for UI
     public Integer getNumberOfNights() {

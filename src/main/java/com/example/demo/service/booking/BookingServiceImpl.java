@@ -3,10 +3,7 @@ import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
 import com.example.demo.dto.booking.BookingStatsResponse;
 import com.example.demo.dto.hotel_image.HotelImageResponse;
-import com.example.demo.entity.Booking;
-import com.example.demo.entity.Hotel;
-import com.example.demo.entity.RoomType;
-import com.example.demo.entity.User;
+import com.example.demo.entity.*;
 import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.RoomTypeRepository;
 import com.example.demo.repository.UserRepository;
@@ -23,6 +20,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -218,6 +216,15 @@ public class BookingServiceImpl implements BookingService {
             return false;
         }
 
+        // ✅ Kiểm tra payment: nếu đã thanh toán thì không cho hủy
+        Set<Payment> payments = booking.getPayments();
+        if (payments != null && !payments.isEmpty()) {
+            Payment payment = payments.iterator().next();
+            if (payment.isPaid()) {
+                return false; // Đã thanh toán thì không cho hủy
+            }
+        }
+
         // Kiểm tra thời hạn 24h
         LocalDate checkInDate = booking.getCheckInDate();
         LocalDate now = LocalDate.now();
@@ -228,8 +235,6 @@ public class BookingServiceImpl implements BookingService {
 
     private Boolean calculateCanModify(Booking booking) {
         String status = booking.getStatus();
-
-        // Không thể sửa nếu đã hủy, hoàn thành, hoặc đã nhận phòng
         if ("Đã hủy".equals(status) ||
                 "Hoàn thành".equals(status) ||
                 "Đã nhận phòng".equals(status) ||
@@ -513,17 +518,31 @@ public class BookingServiceImpl implements BookingService {
             response.setRoomNumber(booking.getAssignedRoom().getRoomNumber());
         }
 
-        // Convert BigDecimal to Double
         if (booking.getTotalPrice() != null) {
             response.setTotalPrice(booking.getTotalPrice().doubleValue());
         }
 
-        // ========== ✅ NEW: HOTEL INFORMATION FROM ROOMTYPE -> HOTEL ==========
+        // ========== ✅ PAYMENT MAPPING ==========
+        Set<Payment> payments = booking.getPayments();
+        if (payments != null && !payments.isEmpty()) {
+            Payment payment = payments.iterator().next();
+
+            response.setPaymentId(payment.getId());
+            response.setPaymentStatus(payment.getPaymentStatus());
+            response.setPaymentMethod(payment.getPaymentMethod());
+            response.setPaymentDate(payment.getPaymentDate());
+            response.setIsPaid(payment.isPaid());
+        } else {
+            // Chưa có payment
+            response.setPaymentStatus("Chưa thanh toán");
+            response.setIsPaid(false);
+        }
+
+        // ========== HOTEL INFORMATION ==========
         RoomType roomType = booking.getRoomType();
         Hotel hotel = roomType.getHotel();
 
         if (hotel != null) {
-            // Basic hotel info
             response.setHotelId(hotel.getId());
             response.setHotelName(hotel.getHotelName());
             response.setHotelAddress(hotel.getAddress());
@@ -534,13 +553,11 @@ public class BookingServiceImpl implements BookingService {
             response.setIsHotelActive(hotel.getIsActive());
             response.setHotelPropertyType(hotel.getPropertyType());
 
-            // Hotel location info
             if (hotel.getLocation() != null) {
                 response.setHotelLocationCity(hotel.getLocation().getCityName());
                 response.setHotelLocationDistrict(hotel.getLocation().getCityName());
             }
 
-            // Hotel rating calculation
             if (hotel.getReviews() != null && !hotel.getReviews().isEmpty()) {
                 Double avgRating = hotel.getReviews().stream()
                         .mapToDouble(review -> review.getRating().doubleValue())
@@ -553,29 +570,25 @@ public class BookingServiceImpl implements BookingService {
                 response.setHotelReviewCount(0);
             }
 
-            // Hotel images
             if (hotel.getImages() != null && !hotel.getImages().isEmpty()) {
                 List<HotelImageResponse> imageResponses = hotel.getImages().stream()
                         .map(image -> {
                             HotelImageResponse imageResponse = modelMapper.map(image, HotelImageResponse.class);
-                            imageResponse.setHotelName(hotel.getHotelName()); // Set hotel name in image
+                            imageResponse.setHotelName(hotel.getHotelName());
                             return imageResponse;
                         })
                         .collect(Collectors.toList());
                 response.setHotelImages(imageResponses);
-
-                // Set primary image URL for easy access
                 response.setPrimaryHotelImageUrl(response.getPrimaryHotelImageUrl());
             }
         }
 
-        // ========== ✅ NEW: ROOM TYPE DETAILS ==========
+        // ========== ROOM TYPE DETAILS ==========
         response.setRoomTypeBasePrice(roomType.getBasePrice() != null ? roomType.getBasePrice().doubleValue() : null);
         response.setRoomTypeMaxOccupancy(roomType.getMaxOccupancy());
         response.setRoomTypeDescription(roomType.getDescription());
         response.setRoomTypeBedSize(roomType.getMaxOccupancy() != null ? roomType.getMaxOccupancy().doubleValue() : null);
 
-        // Room type amenities (combine amenity names)
         if (roomType.getAmenities() != null && !roomType.getAmenities().isEmpty()) {
             String amenitiesString = roomType.getAmenities().stream()
                     .map(amenity -> amenity.getAmenityName())
@@ -583,7 +596,7 @@ public class BookingServiceImpl implements BookingService {
             response.setRoomTypeAmenities(amenitiesString);
         }
 
-        // ========== EXISTING PERMISSION CALCULATIONS ==========
+        // ========== PERMISSION CALCULATIONS ==========
         response.setCanCancel(calculateCanCancel(booking));
         response.setCanModify(calculateCanModify(booking));
         response.setCanCheckIn(calculateCanCheckIn(booking));
@@ -591,6 +604,7 @@ public class BookingServiceImpl implements BookingService {
 
         return response;
     }
+
 
 
     private BookingResponse mapToBookingResponse(Booking booking) {
@@ -651,6 +665,19 @@ public class BookingServiceImpl implements BookingService {
             } else {
                 response.setHotelAverageRating(0.0);
                 response.setHotelReviewCount(0);
+            }
+            Set<Payment> payments = booking.getPayments();
+            if (payments != null && !payments.isEmpty()) {
+                Payment payment = payments.iterator().next(); // Chỉ có 1 payment
+
+                response.setPaymentId(payment.getId());
+                response.setPaymentStatus(payment.getPaymentStatus());
+                response.setPaymentMethod(payment.getPaymentMethod());
+                response.setPaymentDate(payment.getPaymentDate());
+                response.setIsPaid(payment.isPaid());
+            } else {
+                response.setPaymentStatus("Chưa thanh toán");
+                response.setIsPaid(false);
             }
 
             // Hotel images with proper mapping
