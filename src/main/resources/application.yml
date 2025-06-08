@@ -12,8 +12,8 @@ payment:
     query-url: "https://test-payment.momo.vn/v2/gateway/api/query"
 
     # ✅ UPDATED với ngrok URL thực tế của bạn
-    callback-url: "https://e7b2-42-114-94-137.ngrok-free.app/api/v1/payments/callback"
-    redirect-url: "https://e7b2-42-114-94-137.ngrok-free.app/api/v1/payments/callback"
+    callback-url: "https://c1b7-42-114-248-60.ngrok-free.app/api/v1/payments/callback"
+    redirect-url: "https://c1b7-42-114-248-60.ngrok-free.app/api/v1/payments/callback"
 
     # Request settings
     request-type: "captureWallet"

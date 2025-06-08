@@ -11,6 +11,7 @@ import com.example.demo.entity.PaymentHistory;
 import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.PaymentHistoryRepository;
 import com.example.demo.repository.PaymentRepository;
+import com.example.demo.service.booking.BookingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import org.apache.commons.codec.binary.Hex;
@@ -39,6 +40,8 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentHistoryRepository paymentHistoryRepository;
     private final BookingRepository bookingRepository;
     private final ModelMapper modelMapper;
+    private final BookingService bookingService; // ← ✅ ADD THIS DEPENDENCY
+
     private final PaymentConfig paymentConfig;
     private final RestTemplate restTemplate;
 
@@ -103,7 +106,6 @@ public class PaymentServiceImpl implements PaymentService {
         return modelMapper.map(payment, PaymentResponse.class);
     }
 
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @Override
     public PaymentResponse getPaymentById(Long id) {
         Payment payment = paymentRepository.findById(id)
@@ -112,7 +114,6 @@ public class PaymentServiceImpl implements PaymentService {
         return modelMapper.map(payment, PaymentResponse.class);
     }
 
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @Override
     public List<PaymentResponse> getPaymentsByBookingId(Long bookingId) {
         List<Payment> payments = paymentRepository.findByBookingId(bookingId);
@@ -159,7 +160,6 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
 
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @Transactional
     @Override
     public PaymentResponse updatePaymentStatus(Long id, String status) {
@@ -171,13 +171,32 @@ public class PaymentServiceImpl implements PaymentService {
 
         if ("Đã thanh toán".equals(status)) {
             payment.setPaymentDate(LocalDateTime.now());
+
+            // 🎯 ✅ AUTO CONFIRM BOOKING when manually set to "Đã thanh toán"
+            try {
+                Long bookingId = payment.getBooking().getId();
+                log.info("🏨 Manual update: Auto-confirming booking: {} after payment marked as paid", bookingId);
+
+                bookingService.confirmBooking(bookingId);
+                log.info("✅ Booking auto-confirmed after manual payment update: {}", bookingId);
+
+            } catch (Exception e) {
+                log.error("❌ Failed to confirm booking after manual payment update: {}", payment.getId(), e);
+
+                // Don't throw - payment update was successful
+                paymentHistoryRepository.save(
+                        PaymentHistory.createRecord(payment,
+                                "WARNING: Manual payment update successful but booking confirmation failed: " + e.getMessage())
+                );
+            }
         }
 
         payment = paymentRepository.save(payment);
 
         // Create payment history
         paymentHistoryRepository.save(
-                PaymentHistory.updateRecord(payment, "Cập nhật trạng thái từ " + oldStatus + " sang " + status)
+                PaymentHistory.updateRecord(payment,
+                        "Manual status update from " + oldStatus + " to " + status)
         );
 
         return modelMapper.map(payment, PaymentResponse.class);
@@ -186,7 +205,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     @Override
     public PaymentResponse processPaymentCallback(PaymentCallbackRequest request) {
-        // Verify callback - ĐÃ ĐƯỢC FIX CHO ĐỒ ÁN
+        log.info("🎯 Processing MoMo callback for orderId: {}, resultCode: {}",
+                request.getOrderId(), request.getResultCode());
+
+        // Verify callback
         if (!verifyPaymentCallback(request)) {
             log.error("❌ MoMo callback không hợp lệ cho orderId: {}", request.getOrderId());
             throw new RuntimeException("MoMo callback không hợp lệ");
@@ -196,12 +218,15 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = findPaymentByCallback(request);
 
         // Update payment status
-        String newStatus = request.isSuccess() ? "Đã thanh toán" : "Đã hủy";
-        payment.setPaymentStatus(newStatus);
+        String newPaymentStatus = request.isSuccess() ? "Đã thanh toán" : "Đã hủy";
+        payment.setPaymentStatus(newPaymentStatus);
         payment.setGatewayResponse(request.getMessage());
 
         if (request.isSuccess()) {
             payment.setPaymentDate(LocalDateTime.now());
+            if (request.getTransId() != null && !request.getTransId().isEmpty()) {
+                payment.setTransactionId(request.getTransId());
+            }
         }
 
         payment = paymentRepository.save(payment);
@@ -213,8 +238,29 @@ public class PaymentServiceImpl implements PaymentService {
                         request.toString())
         );
 
-        log.info("✅ Xử lý MoMo callback thành công - PaymentId: {}, Status: {}",
-                payment.getId(), newStatus);
+        log.info("✅ Payment status updated to: {} for paymentId: {}", newPaymentStatus, payment.getId());
+
+        // 🎯 ✅ AUTO CONFIRM BOOKING when payment success
+        if (request.isSuccess()) {
+            try {
+                Long bookingId = payment.getBooking().getId();
+                log.info("🏨 Auto-confirming booking: {} after payment success", bookingId);
+
+                bookingService.confirmBooking(bookingId);
+                log.info("✅ Booking auto-confirmed successfully: {}", bookingId);
+
+            } catch (Exception e) {
+                log.error("❌ CRITICAL: Payment successful but booking confirmation failed for payment: {}",
+                        payment.getId(), e);
+
+                // 🚨 IMPORTANT: DON'T throw exception here - payment was successful
+                // Create error record for manual intervention
+                paymentHistoryRepository.save(
+                        PaymentHistory.createRecord(payment,
+                                "ERROR: Payment successful but booking confirmation failed: " + e.getMessage())
+                );
+            }
+        }
 
         return modelMapper.map(payment, PaymentResponse.class);
     }
@@ -465,7 +511,25 @@ public class PaymentServiceImpl implements PaymentService {
             if (responseBody != null) {
                 Integer resultCode = (Integer) responseBody.get("resultCode");
                 String message = (String) responseBody.get("message");
-                String transId = (String) responseBody.get("transId");
+
+                // 🎯 FIX: Handle transId properly - can be Integer or String
+                Object transIdObj = responseBody.get("transId");
+                String transId = null;
+
+                if (transIdObj != null) {
+                    if (transIdObj instanceof String) {
+                        transId = (String) transIdObj;
+                    } else if (transIdObj instanceof Integer) {
+                        Integer transIdInt = (Integer) transIdObj;
+                        // Only convert to string if it's not 0 (0 means no transaction)
+                        if (transIdInt != 0) {
+                            transId = String.valueOf(transIdInt);
+                        }
+                    } else {
+                        // Handle other types (Long, etc.)
+                        transId = String.valueOf(transIdObj);
+                    }
+                }
 
                 log.info("📊 Query Result - ResultCode: {}, Message: {}, TransId: {}",
                         resultCode, message, transId);
@@ -474,10 +538,11 @@ public class PaymentServiceImpl implements PaymentService {
                 if (resultCode != null && resultCode == 0) {
                     log.info("✅ MoMo confirms payment SUCCESS for orderId: {}", orderId);
 
-                    // Update transactionId if available
-                    if (transId != null && !transId.isEmpty()) {
+                    // Update transactionId if available and not empty/zero
+                    if (transId != null && !transId.isEmpty() && !"0".equals(transId)) {
                         payment.setTransactionId(transId);
                         paymentRepository.save(payment);
+                        log.info("💳 Updated transaction ID: {}", transId);
                     }
 
                     return true;
@@ -496,6 +561,7 @@ public class PaymentServiceImpl implements PaymentService {
             return false;
         }
     }
+
 
     // ========== Signature Calculation Methods ==========
 
@@ -643,7 +709,7 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new RuntimeException("Payment không tồn tại với id: " + paymentId));
 
-        // Update status
+        // Update payment status
         String oldStatus = payment.getPaymentStatus();
         payment.setPaymentStatus("Đã thanh toán");
         payment.setPaymentDate(LocalDateTime.now());
@@ -654,11 +720,19 @@ public class PaymentServiceImpl implements PaymentService {
         // Create payment history
         paymentHistoryRepository.save(
                 PaymentHistory.updateRecord(payment,
-                        "TEST: Simulated success transition from " + oldStatus + " to Đã thanh toán")
+                        "TEST: Simulated success from " + oldStatus + " to Đã thanh toán")
         );
 
-        log.info("✅ Payment {} marked as successful (TEST MODE)", paymentId);
+        // 🎯 ✅ AUTO CONFIRM BOOKING for test
+        Long bookingId = payment.getBooking().getId();
+        log.info("🏨 TEST: Auto-confirming booking: {} after simulated payment", bookingId);
 
+        // ✅ Let GlobalException handle any errors - simple throw
+        bookingService.confirmBooking(bookingId);
+        log.info("✅ TEST: Booking auto-confirmed successfully: {}", bookingId);
+
+        log.info("✅ Payment {} marked as successful (TEST MODE)", paymentId);
         return modelMapper.map(payment, PaymentResponse.class);
     }
+
 }

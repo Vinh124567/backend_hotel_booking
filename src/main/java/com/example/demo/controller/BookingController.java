@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
+import com.example.demo.dto.booking.BookingStatsResponse;
 import com.example.demo.response.ApiResponse;
 import com.example.demo.service.booking.BookingService;
 import lombok.RequiredArgsConstructor;
@@ -88,6 +89,59 @@ public class BookingController {
     }
 
     /**
+     * ✅ Check-in booking
+     */
+    @PutMapping("/{id}/check-in")
+    public ResponseEntity<ApiResponse<BookingResponse>> checkInBooking(@PathVariable Long id) {
+        log.info("Check-in booking: {}", id);
+
+        BookingResponse booking = bookingService.checkInBooking(id);
+
+        ApiResponse<BookingResponse> response = new ApiResponse<>();
+        response.setResult(booking);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Check-in thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ✅ Check-out booking
+     */
+    @PutMapping("/{id}/check-out")
+    public ResponseEntity<ApiResponse<BookingResponse>> checkOutBooking(@PathVariable Long id) {
+        log.info("Check-out booking: {}", id);
+
+        BookingResponse booking = bookingService.checkOutBooking(id);
+
+        ApiResponse<BookingResponse> response = new ApiResponse<>();
+        response.setResult(booking);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Check-out thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ✅ Cập nhật booking (modify)
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<BookingResponse>> updateBooking(
+            @PathVariable Long id,
+            @Valid @RequestBody BookingRequest request) {
+        log.info("Updating booking: {}", id);
+
+        BookingResponse booking = bookingService.updateBooking(id, request);
+
+        ApiResponse<BookingResponse> response = new ApiResponse<>();
+        response.setResult(booking);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Cập nhật đặt phòng thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Kiểm tra room type có available không
      */
     @GetMapping("/check-availability")
@@ -111,13 +165,47 @@ public class BookingController {
     }
 
     /**
-     * Health check endpoint
+     * ✅ Lấy thống kê booking của user
      */
-    @GetMapping("/health")
-    public ResponseEntity<ApiResponse<String>> healthCheck() {
-        ApiResponse<String> response = new ApiResponse<>();
-        response.setResult("Booking service is running");
+    @GetMapping("/stats")
+    public ResponseEntity<ApiResponse<BookingStatsResponse>> getBookingStats() {
+        log.info("Getting booking stats for current user");
+
+        BookingStatsResponse stats = bookingService.getUserBookingStats();
+
+        ApiResponse<BookingStatsResponse> response = new ApiResponse<>();
+        response.setResult(stats);
         response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy thống kê thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/confirm")
+    public ResponseEntity<ApiResponse<BookingResponse>> confirmBooking(@PathVariable Long id) {
+        log.info("Confirming booking: {}", id);
+
+        BookingResponse booking = bookingService.confirmBooking(id);
+
+        ApiResponse<BookingResponse> response = new ApiResponse<>();
+        response.setResult(booking);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Xác nhận đặt phòng thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/admin/pending-confirmation")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('STAFF')")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getPendingBookings() {
+        log.info("Getting all pending confirmation bookings");
+
+        List<BookingResponse> bookings = bookingService.getPendingBookings();
+
+        ApiResponse<List<BookingResponse>> response = new ApiResponse<>();
+        response.setResult(bookings);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy danh sách booking chờ xác nhận thành công");
 
         return ResponseEntity.ok(response);
     }

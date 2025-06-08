@@ -2,6 +2,8 @@ package com.example.demo.service.booking;
 
 import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
+import com.example.demo.dto.booking.BookingStatsResponse;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -31,4 +33,18 @@ public interface BookingService {
      * Kiểm tra room type có available không
      */
     boolean isRoomTypeAvailable(Long roomTypeId, LocalDate checkInDate, LocalDate checkOutDate);
+
+
+    public BookingResponse checkInBooking(Long bookingId);
+
+    public BookingResponse checkOutBooking(Long bookingId);
+
+
+    public BookingResponse updateBooking(Long bookingId, BookingRequest request);
+
+    public BookingStatsResponse getUserBookingStats();
+    BookingResponse confirmBooking(Long bookingId);
+    List<BookingResponse> getPendingBookings();
+
+
 }
