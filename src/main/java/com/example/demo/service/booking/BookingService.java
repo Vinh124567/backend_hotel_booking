@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface BookingService {
-
+    List<BookingResponse> getCurrentUserPendingBookings();
     /**
      * Tạo booking mới
      */
@@ -46,5 +46,44 @@ public interface BookingService {
     BookingResponse confirmBooking(Long bookingId);
     List<BookingResponse> getPendingBookings();
 
+    /**
+     * Lấy danh sách booking sẵn sàng check-in hôm nay
+     */
+    List<BookingResponse> getBookingsReadyForCheckIn();
+
+    /**
+     * Lấy danh sách booking sẵn sàng check-out hôm nay
+     */
+    List<BookingResponse> getBookingsReadyForCheckOut();
+
+    /**
+     * Lấy danh sách booking đang ở khách sạn (đã check-in)
+     */
+    List<BookingResponse> getCurrentlyCheckedInBookings();
+
+    /**
+     * Lấy lịch sử check-in/out của user hiện tại
+     */
+    List<BookingResponse> getCheckHistory();
+
+//    /**
+//     * Admin: Check-in hàng loạt
+//     */
+//    List<BookingResponse> batchCheckIn(List<Long> bookingIds);
+//
+//    /**
+//     * Admin: Check-out hàng loạt
+//     */
+//    List<BookingResponse> batchCheckOut(List<Long> bookingIds);
+//
+//    /**
+//     * Admin: Force check-in (bỏ qua validation)
+//     */
+//    BookingResponse forceCheckIn(Long bookingId);
+//
+//    /**
+//     * Admin: Force check-out (bỏ qua validation)
+//     */
+//    BookingResponse forceCheckOut(Long bookingId);
 
 }

@@ -209,4 +209,85 @@ public class BookingController {
 
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/pending")
+    public ResponseEntity<?> getMyPendingBookings() {
+        List<BookingResponse> pendingBookings = bookingService.getCurrentUserPendingBookings();
+        ApiResponse<List<BookingResponse>> response = new ApiResponse<>();
+        response.setResult(pendingBookings);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy danh sách booking tạm giữ chỗ thành công");
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+
+    /**
+     * ✅ Lấy danh sách booking sẵn sàng check-in hôm nay
+     */
+    @GetMapping("/ready-for-checkin")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getBookingsReadyForCheckIn() {
+        log.info("Getting bookings ready for check-in");
+
+        List<BookingResponse> bookings = bookingService.getBookingsReadyForCheckIn();
+
+        ApiResponse<List<BookingResponse>> response = new ApiResponse<>();
+        response.setResult(bookings);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy danh sách booking sẵn sàng check-in thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ✅ Lấy danh sách booking sẵn sàng check-out hôm nay
+     */
+    @GetMapping("/ready-for-checkout")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_STAFF')")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getBookingsReadyForCheckOut() {
+        log.info("Getting bookings ready for check-out");
+
+        List<BookingResponse> bookings = bookingService.getBookingsReadyForCheckOut();
+
+        ApiResponse<List<BookingResponse>> response = new ApiResponse<>();
+        response.setResult(bookings);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy danh sách booking sẵn sàng check-out thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ✅ Lấy danh sách booking đang ở khách sạn (đã check-in)
+     */
+    @GetMapping("/checked-in")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_STAFF')")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getCurrentlyCheckedInBookings() {
+        log.info("Getting currently checked-in bookings");
+
+        List<BookingResponse> bookings = bookingService.getCurrentlyCheckedInBookings();
+
+        ApiResponse<List<BookingResponse>> response = new ApiResponse<>();
+        response.setResult(bookings);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy danh sách booking đã check-in thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ✅ Lấy lịch sử check-in/out của user hiện tại
+     */
+    @GetMapping("/check-history")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getCheckHistory() {
+        log.info("Getting user's check-in/out history");
+
+        List<BookingResponse> bookings = bookingService.getCheckHistory();
+
+        ApiResponse<List<BookingResponse>> response = new ApiResponse<>();
+        response.setResult(bookings);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy lịch sử check-in/out thành công");
+
+        return ResponseEntity.ok(response);
+    }
 }

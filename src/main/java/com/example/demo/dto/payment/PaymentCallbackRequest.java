@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PaymentCallbackRequest {
-    // MoMo callback fields
     private String partnerCode;
     private String orderId;
     private String requestId;

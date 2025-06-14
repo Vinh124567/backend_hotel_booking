@@ -70,7 +70,6 @@ public class PaymentController {
     @GetMapping("/{id}/status")
     public ResponseEntity<ApiResponse<PaymentStatusResponse>> checkPaymentStatus(@PathVariable Long id) {
         PaymentStatusResponse status = paymentService.checkPaymentStatus(id);
-
         ApiResponse<PaymentStatusResponse> response = new ApiResponse<>();
         response.setResult(status);
         response.setCode(HttpStatus.OK.value());
@@ -216,7 +215,6 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<PaymentResponse>> simulatePaymentSuccess(@PathVariable Long id) {
         log.info("🧪 TEST MODE: Simulating payment success for payment: {}", id);
 
-        // Cần thêm method này vào PaymentService interface
         PaymentResponse payment = paymentService.simulatePaymentSuccess(id);
 
         ApiResponse<PaymentResponse> response = new ApiResponse<>();
@@ -227,9 +225,7 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * ✅ Test callback endpoint accessibility
-     */
+
     @GetMapping("/callback/test")
     public ResponseEntity<ApiResponse<Map<String, Object>>> testCallbackEndpoint() {
         Map<String, Object> result = new HashMap<>();

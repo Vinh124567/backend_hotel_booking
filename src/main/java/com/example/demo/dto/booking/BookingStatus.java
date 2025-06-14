@@ -1,35 +1,44 @@
 package com.example.demo.dto.booking;
-public enum BookingStatus {
-    CONFIRMED("CONFIRMED", "Đã xác nhận"),
-    PAID("PAID", "Đã thanh toán"),
-    CANCELLED("CANCELLED", "Đã hủy"),
-    CHECKED_IN("CHECKED_IN", "Đã nhận phòng"),
-    CHECKED_OUT("CHECKED_OUT", "Đã trả phòng"),
-    NO_SHOW("NO_SHOW", "Không đến"),
-    EXPIRED("EXPIRED", "Đã hết hạn");
 
-    private final String code;
-    private final String description;
+public final class BookingStatus {
 
-    BookingStatus(String code, String description) {
-        this.code = code;
-        this.description = description;
+    public static final String TEMPORARY = "Tạm giữ chỗ";
+    public static final String PENDING = "Chờ xác nhận";
+    public static final String CONFIRMED = "Đã xác nhận";
+    public static final String CHECKED_IN = "Đã nhận phòng";
+    public static final String COMPLETED = "Hoàn thành";
+    public static final String CANCELLED = "Đã hủy";
+
+    public static final String NO_SHOW = "Không đến";
+
+    private BookingStatus() {
+        throw new IllegalStateException("Utility class");
     }
 
-    public String getCode() {
-        return code;
+    public static boolean isValidStatus(String status) {
+        return TEMPORARY.equals(status) ||
+                PENDING.equals(status) ||
+                CONFIRMED.equals(status) ||
+                CHECKED_IN.equals(status) ||
+                COMPLETED.equals(status) ||
+                CANCELLED.equals(status) ||
+                NO_SHOW.equals(status);
     }
 
-    public String getDescription() {
-        return description;
+    public static boolean canBeConfirmed(String status) {
+        return TEMPORARY.equals(status) || PENDING.equals(status);
     }
 
-    public static BookingStatus fromCode(String code) {
-        for (BookingStatus status : values()) {
-            if (status.code.equals(code)) {
-                return status;
-            }
-        }
-        throw new IllegalArgumentException("Unknown booking status code: " + code);
+    public static boolean isActive(String status) {
+        return TEMPORARY.equals(status) ||
+                PENDING.equals(status) ||
+                CONFIRMED.equals(status) ||
+                CHECKED_IN.equals(status);
+    }
+
+    public static boolean isCancellable(String status) {
+        return TEMPORARY.equals(status) ||
+                PENDING.equals(status) ||
+                CONFIRMED.equals(status);
     }
 }

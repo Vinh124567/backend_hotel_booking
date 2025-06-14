@@ -70,6 +70,7 @@ public class BookingResponse {
     private Boolean canModify;
     private Boolean canCheckIn;
     private Boolean canCheckOut;
+    private String qrCode;
 
 
     private Long paymentId;
