@@ -38,4 +38,7 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     // Tìm những đánh giá có chứa ảnh
     @Query("SELECT r FROM Review r JOIN r.images i WHERE r.hotel.id = :hotelId GROUP BY r.id HAVING COUNT(i) > 0")
     List<Review> findReviewsWithImages(@Param("hotelId") Long hotelId);
+
+    @Query("SELECT CASE WHEN COUNT(r) > 0 THEN true ELSE false END FROM Review r WHERE r.user.id = :userId AND r.hotel.id = :hotelId")
+    boolean existsByUserIdAndHotelId(@Param("userId") Long userId, @Param("hotelId") Long hotelId);
 }

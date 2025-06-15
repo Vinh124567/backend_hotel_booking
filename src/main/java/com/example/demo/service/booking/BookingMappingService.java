@@ -4,6 +4,8 @@ import com.example.demo.dto.booking.BookingResponse;
 import com.example.demo.dto.booking.BookingStatus;
 import com.example.demo.dto.hotel_image.HotelImageResponse;
 import com.example.demo.entity.*;
+import com.example.demo.repository.ReviewRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -13,8 +15,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class BookingMappingService {
-
+    private final ReviewRepository reviewRepository;
     public BookingResponse mapToBookingResponse(Booking booking) {
         BookingResponse response = new BookingResponse();
 
@@ -24,7 +27,7 @@ public class BookingMappingService {
         mapHotelInfo(response, booking.getRoomType().getHotel());
         mapPaymentInfo(response, booking.getPayments());
         mapPermissions(response, booking);
-
+        mapReviewInfo(response, booking);
         return response;
     }
 
@@ -68,6 +71,36 @@ public class BookingMappingService {
                     .map(Amenity::getAmenityName)
                     .collect(Collectors.joining(", "));
             response.setRoomTypeAmenities(amenitiesString);
+        }
+    }
+
+    private void mapReviewInfo(BookingResponse response, Booking booking) {
+        if (booking.getUser() != null && booking.getRoomType() != null && booking.getRoomType().getHotel() != null) {
+            Long userId = booking.getUser().getId();
+            Long hotelId = booking.getRoomType().getHotel().getId();
+
+            // Check if user has completed this booking
+            boolean isCompleted = BookingStatus.COMPLETED.equals(booking.getStatus());
+
+            // Check if user already reviewed this hotel
+            boolean hasReviewed = reviewRepository.existsByUserIdAndHotelId(userId, hotelId);
+
+            // Set review eligibility: can review if completed and not yet reviewed
+            response.setCanReview(isCompleted && !hasReviewed);
+            response.setHasReviewed(hasReviewed);
+
+            // Get existing review ID if exists
+            if (hasReviewed) {
+                Review existingReview = reviewRepository.findByUserIdAndHotelId(userId, hotelId);
+                if (existingReview != null) {
+                    response.setExistingReviewId(existingReview.getId());
+                }
+            }
+        } else {
+            // Default values if data is missing
+            response.setCanReview(false);
+            response.setHasReviewed(false);
+            response.setExistingReviewId(null);
         }
     }
 

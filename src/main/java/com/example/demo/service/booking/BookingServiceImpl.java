@@ -1,10 +1,12 @@
 package com.example.demo.service.booking;
+
 import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
 import com.example.demo.dto.booking.BookingStatsResponse;
 import com.example.demo.dto.booking.BookingStatus;
 import com.example.demo.entity.*;
 import com.example.demo.repository.BookingRepository;
+import com.example.demo.repository.RoomRepository;
 import com.example.demo.repository.RoomTypeRepository;
 import com.example.demo.service.user.UserService;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -28,7 +29,7 @@ public class BookingServiceImpl implements BookingService {
     private static final int TEMPORARY_BOOKING_EXPIRE_MINUTES = 15;
     private static final int PENDING_BOOKING_EXPIRE_MINUTES = 30;
     private static final long TOTAL_ROOMS_PER_TYPE = 5;
-
+    private final RoomRepository roomRepository;
     private final BookingRepository bookingRepository;
     private final UserService userService;
     private final RoomTypeRepository roomTypeRepository;
@@ -55,24 +56,59 @@ public class BookingServiceImpl implements BookingService {
         User currentUser = userService.getCurrentUser();
 
         validationService.validateBookingRequest(request);
-
+        validationService.validateUserBookingLimits(currentUser.getId());
         RoomType roomType = roomTypeRepository.findById(request.getRoomTypeId())
                 .orElseThrow(() -> new RuntimeException("Loại phòng không tồn tại với ID: " + request.getRoomTypeId()));
 
-        if (availabilityService.hasUserPendingBookingForDates(currentUser.getId(),
-                request.getCheckInDate(), request.getCheckOutDate())) {
-            throw new RuntimeException("Bạn đã có booking đang chờ thanh toán cho thời gian này");
-        }
+//        if (availabilityService.hasUserPendingBookingForDates(currentUser.getId(),
+//                request.getCheckInDate(), request.getCheckOutDate())) {
+//            throw new RuntimeException("Bạn đã có booking đang chờ thanh toán cho thời gian này");
+//        }
 
-        if (!availabilityService.isRoomTypeAvailable(request.getRoomTypeId(),
-                request.getCheckInDate(), request.getCheckOutDate())) {
-            throw new RuntimeException("Loại phòng không khả dụng trong thời gian đã chọn");
+        // ✅ THÊM: Handle 2 flows khác nhau
+        Room assignedRoom = null;
+
+        if (request.hasSpecificRoomSelected()) {
+            // Flow 1: User chọn phòng cụ thể
+            assignedRoom = validateAndGetSpecificRoom(request);
+            log.info("User selected specific room: {}", assignedRoom.getRoomNumber());
+        } else {
+            // Flow 2: User chỉ chọn roomType, check availability tổng quát
+            if (!availabilityService.isRoomTypeAvailable(request.getRoomTypeId(),
+                    request.getCheckInDate(), request.getCheckOutDate())) {
+                throw new RuntimeException("Loại phòng không khả dụng trong thời gian đã chọn");
+            }
+            log.info("User selected room type: {}, system will auto-assign room later", roomType.getTypeName());
         }
 
         Booking booking = createBookingEntity(currentUser, roomType, request);
+
+        // ✅ Assign room ngay nếu user đã chọn cụ thể
+        if (assignedRoom != null) {
+            booking.setAssignedRoom(assignedRoom);
+        }
+
         booking = bookingRepository.save(booking);
 
         return mappingService.mapToBookingResponse(booking);
+    }
+
+    private Room validateAndGetSpecificRoom(BookingRequest request) {
+        Room room = roomRepository.findById(request.getRoomId())
+                .orElseThrow(() -> new RuntimeException("Phòng không tồn tại với ID: " + request.getRoomId()));
+
+        // Validate room thuộc đúng roomType
+        if (!room.getRoomType().getId().equals(request.getRoomTypeId())) {
+            throw new RuntimeException("Phòng không thuộc loại phòng đã chọn");
+        }
+
+        // Validate room có available không
+        if (!availabilityService.isSpecificRoomAvailable(request.getRoomId(),
+                request.getCheckInDate(), request.getCheckOutDate())) {
+            throw new RuntimeException("Phòng " + room.getRoomNumber() + " không khả dụng trong thời gian đã chọn");
+        }
+
+        return room;
     }
 
     @Override
@@ -80,6 +116,7 @@ public class BookingServiceImpl implements BookingService {
         return availabilityService.isRoomTypeAvailable(roomTypeId, checkInDate, checkOutDate);
     }
 
+    @Transactional
     @Override
     public BookingResponse confirmBooking(Long bookingId) {
         Booking booking = bookingRepository.findByIdWithDetails(bookingId)
@@ -89,6 +126,22 @@ public class BookingServiceImpl implements BookingService {
 
         if (!availabilityService.isRoomTypeAvailableForConfirmation(booking)) {
             throw new RuntimeException("Phòng không còn khả dụng");
+        }
+
+        // ✅ THÊM: Assign room cụ thể khi confirm
+        if (booking.getAssignedRoom() == null) {
+            Room availableRoom = availabilityService.findAvailableRoom(
+                    booking.getRoomType().getId(),
+                    booking.getCheckInDate(),
+                    booking.getCheckOutDate()
+            );
+
+            if (availableRoom == null) {
+                throw new RuntimeException("Không có phòng trống để assign");
+            }
+
+            booking.setAssignedRoom(availableRoom);
+            log.info("Assigned room {} to booking {}", availableRoom.getRoomNumber(), bookingId);
         }
 
         booking.setStatus(BookingStatus.CONFIRMED);
@@ -107,6 +160,14 @@ public class BookingServiceImpl implements BookingService {
         validationService.validateCancellation(booking);
 
         booking.setStatus(BookingStatus.CANCELLED);
+        Room assignedRoom = booking.getAssignedRoom();
+        if (assignedRoom != null) {
+            assignedRoom.setStatus("Trống"); // hoặc RoomStatus.AVAILABLE
+            roomRepository.save(assignedRoom);
+
+            log.info("Updated room {} status to 'Trống' on booking cancellation",
+                    assignedRoom.getRoomNumber());
+        }
         booking = bookingRepository.save(booking);
 
         return mappingService.mapToBookingResponse(booking);
@@ -132,6 +193,7 @@ public class BookingServiceImpl implements BookingService {
         return mappingService.mapToBookingResponse(booking);
     }
 
+    @Transactional
     @Override
     public BookingResponse checkInBooking(Long bookingId) {
         User currentUser = userService.getCurrentUser();
@@ -141,7 +203,31 @@ public class BookingServiceImpl implements BookingService {
         validationService.validateBookingOwnership(booking, currentUser);
         validationService.validateCheckIn(booking);
 
+        // ✅ THÊM: Đảm bảo có room được assign trước khi check-in
+        if (booking.getAssignedRoom() == null) {
+            Room availableRoom = availabilityService.findAvailableRoom(
+                    booking.getRoomType().getId(),
+                    booking.getCheckInDate(),
+                    booking.getCheckOutDate()
+            );
+
+            if (availableRoom == null) {
+                throw new RuntimeException("Không có phòng trống để check-in");
+            }
+
+            booking.setAssignedRoom(availableRoom);
+            log.info("Auto-assigned room {} for check-in booking {}", availableRoom.getRoomNumber(), bookingId);
+        }
+
         booking.setStatus(BookingStatus.CHECKED_IN);
+        Room assignedRoom = booking.getAssignedRoom();
+        if (assignedRoom != null) {
+            assignedRoom.setStatus("Đang sử dụng");
+            roomRepository.save(assignedRoom);
+
+            log.info("Updated room {} status to 'Đang sử dụng' on check-in",
+                    assignedRoom.getRoomNumber());
+        }
         booking = bookingRepository.save(booking);
 
         return mappingService.mapToBookingResponse(booking);
@@ -157,6 +243,14 @@ public class BookingServiceImpl implements BookingService {
         validationService.validateCheckOut(booking);
 
         booking.setStatus(BookingStatus.COMPLETED);
+        Room assignedRoom = booking.getAssignedRoom();
+        if (assignedRoom != null) {
+            assignedRoom.setStatus("Trống"); // hoặc RoomStatus.AVAILABLE
+            roomRepository.save(assignedRoom);
+
+            log.info("Updated room {} status to 'Trống' on check-out",
+                    assignedRoom.getRoomNumber());
+        }
         booking = bookingRepository.save(booking);
 
         return mappingService.mapToBookingResponse(booking);
@@ -202,7 +296,25 @@ public class BookingServiceImpl implements BookingService {
             boolean hasSuccessfulPayment = booking.getPayments().stream()
                     .anyMatch(Payment::isPaid);
 
-            booking.setStatus(hasSuccessfulPayment ? BookingStatus.CONFIRMED : BookingStatus.CANCELLED);
+            if (hasSuccessfulPayment) {
+                booking.setStatus(BookingStatus.CONFIRMED);
+
+                // ✅ THÊM: Auto-assign room khi payment success
+                if (booking.getAssignedRoom() == null) {
+                    Room availableRoom = availabilityService.findAvailableRoom(
+                            booking.getRoomType().getId(),
+                            booking.getCheckInDate(),
+                            booking.getCheckOutDate()
+                    );
+                    if (availableRoom != null) {
+                        booking.setAssignedRoom(availableRoom);
+                        log.info("Auto-assigned room {} to paid booking {}",
+                                availableRoom.getRoomNumber(), booking.getId());
+                    }
+                }
+            } else {
+                booking.setStatus(BookingStatus.CANCELLED);
+            }
         });
 
         if (!expiredBookings.isEmpty()) {
@@ -251,7 +363,6 @@ public class BookingServiceImpl implements BookingService {
     }
 
 
-
     private Double calculateTotalSpent(List<Booking> bookings) {
         return bookings.stream()
                 .filter(b -> !BookingStatus.CANCELLED.equals(b.getStatus()))
@@ -288,5 +399,23 @@ public class BookingServiceImpl implements BookingService {
         return allBookings.stream()
                 .filter(booking -> booking.isCheckedIn() || booking.isCheckedOut())
                 .toList();
+    }
+
+    private void assignRoomIfNeeded(Booking booking) {
+        if (booking.getAssignedRoom() == null) {
+            Room availableRoom = availabilityService.findAvailableRoom(
+                    booking.getRoomType().getId(),
+                    booking.getCheckInDate(),
+                    booking.getCheckOutDate()
+            );
+
+            if (availableRoom != null) {
+                booking.setAssignedRoom(availableRoom);
+                log.info("Auto-assigned room {} to booking {}",
+                        availableRoom.getRoomNumber(), booking.getId());
+            } else {
+                log.warn("No available room for booking {}", booking.getId());
+            }
+        }
     }
 }

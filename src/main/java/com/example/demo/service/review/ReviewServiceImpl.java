@@ -1,5 +1,7 @@
 package com.example.demo.service.review;
 
+import com.example.demo.service.review.ReviewValidationService;
+
 import com.example.demo.dto.review.ReviewRequest;
 import com.example.demo.dto.review.ReviewResponse;
 import com.example.demo.entity.Hotel;
@@ -33,6 +35,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final UserRepository userRepository;
     private final ReviewImageRepository reviewImageRepository;
     private final ModelMapper modelMapper;
+    private final ReviewValidationService reviewValidationService;
 
     @Override
     @Transactional
@@ -43,10 +46,13 @@ public class ReviewServiceImpl implements ReviewService {
         User currentUser = userRepository.findByUsername(currentUsername)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // ✅ THÊM validation này:
+        reviewValidationService.validateReviewEligibility(currentUser.getId(), request.getHotelId());
+
         Hotel hotel = hotelRepository.findById(request.getHotelId())
                 .orElseThrow(() -> new RuntimeException("Hotel not found with ID: " + request.getHotelId()));
 
-        // Tạo review mới
+        // Rest of existing code giữ nguyên...
         Review review = new Review();
         review.setUser(currentUser);
         review.setHotel(hotel);
@@ -58,12 +64,10 @@ public class ReviewServiceImpl implements ReviewService {
         review.setLocationRating(request.getLocationRating());
         review.setValueRating(request.getValueRating());
         review.setReviewDate(LocalDateTime.now());
-        review.setIsApproved(false); // Mặc định chưa được phê duyệt
+        review.setIsApproved(false);
 
-        // Lưu review trước để có ID
         review = reviewRepository.save(review);
 
-        // Xử lý hình ảnh
         if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
             for (String imageUrl : request.getImageUrls()) {
                 ReviewImage reviewImage = new ReviewImage();
@@ -72,6 +76,26 @@ public class ReviewServiceImpl implements ReviewService {
                 reviewImageRepository.save(reviewImage);
             }
         }
+    }
+
+    @Override
+    public boolean canUserReviewHotel(Long hotelId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentUsername = authentication.getName();
+        User currentUser = userRepository.findByUsername(currentUsername)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        return reviewValidationService.canReviewHotel(currentUser.getId(), hotelId);
+    }
+
+    @Override
+    public List<Long> getHotelsEligibleForReview() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentUsername = authentication.getName();
+        User currentUser = userRepository.findByUsername(currentUsername)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        return reviewValidationService.getHotelsEligibleForReview(currentUser.getId());
     }
 
     @Override
@@ -111,7 +135,6 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_MANAGER') or @reviewSecurity.isReviewOwner(#id)")
     public void deleteReview(Long id) {
         Review review = reviewRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Review not found with ID: " + id));
@@ -120,7 +143,6 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_MANAGER')")
     public void approveReview(Long id) {
         Review review = reviewRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Review not found with ID: " + id));
@@ -136,7 +158,6 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
-    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_MANAGER')")
     public List<ReviewResponse> getAllReviews() {
         return reviewRepository.findAll().stream()
                 .map(this::convertToResponse)

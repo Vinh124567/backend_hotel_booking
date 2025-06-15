@@ -84,7 +84,10 @@ public class BookingResponse {
     private Boolean isHotelActive;
     private Hotel.PropertyType hotelPropertyType;
 
-    private Boolean isPaid;            // true/false
+    private Boolean isPaid;// true/false
+    private Boolean canReview;
+    private Boolean hasReviewed;
+    private Long existingReviewId;
 
     // Computed properties for UI
     public Integer getNumberOfNights() {
@@ -116,6 +119,33 @@ public class BookingResponse {
                     .orElse(hotelImages.get(0).getImageUrl()); // Fallback to first image
         }
         return null;
+    }
+
+    public Boolean getCanReview() {
+        return canReview;
+    }
+
+    public void setCanReview(Boolean canReview) {
+        this.canReview = canReview;
+    }
+
+    public Boolean getHasReviewed() {
+        return hasReviewed;
+    }
+
+    public void setHasReviewed(Boolean hasReviewed) {
+        this.hasReviewed = hasReviewed;
+    }
+
+    public Long getExistingReviewId() {
+        return existingReviewId;
+    }
+
+    public void setExistingReviewId(Long existingReviewId) {
+        this.existingReviewId = existingReviewId;
+    }
+    public boolean isEligibleForReview() {
+        return isCheckedOut() && Boolean.TRUE.equals(canReview) && !Boolean.TRUE.equals(hasReviewed);
     }
 
     /**

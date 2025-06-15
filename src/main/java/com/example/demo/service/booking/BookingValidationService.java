@@ -4,13 +4,17 @@ import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingStatus;
 import com.example.demo.entity.Booking;
 import com.example.demo.entity.User;
+import com.example.demo.repository.BookingRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
 @Service
+@RequiredArgsConstructor
 public class BookingValidationService {
+    private final BookingRepository bookingRepository;
 
     public void validateBookingRequest(BookingRequest request) {
         if (request.getCheckInDate().isAfter(request.getCheckOutDate())) {
@@ -117,6 +121,13 @@ public class BookingValidationService {
 
         if (daysUntilCheckIn < 2) {
             throw new RuntimeException("Không thể sửa đổi - Phải trước 48 giờ so với check-in");
+        }
+    }
+
+    public void validateUserBookingLimits(Long userId) {
+        long pendingCount = bookingRepository.countUserActiveBookings(userId);
+        if (pendingCount >= 5) {
+            throw new RuntimeException("Bạn đã có quá nhiều booking chưa hoàn thành. Vui lòng hoàn thành hoặc hủy bớt trước khi đặt thêm.");
         }
     }
 }

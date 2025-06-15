@@ -3,6 +3,7 @@ package com.example.demo.service.auth;
 import com.example.demo.dto.auth.AuthenticationRequestDTO;
 import com.example.demo.dto.auth.IntrospectRequest;
 import com.example.demo.dto.auth.IntrospectResponse;
+import com.example.demo.dto.user.ChangePasswordRequest;
 import com.example.demo.entity.User;
 import com.example.demo.entity.Role;
 import com.example.demo.exception.AppException;
@@ -157,5 +158,48 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         return IntrospectResponse.builder()
                 .valid(verified && expiryTime.after(new Date()))
                 .build();
+    }
+
+    @Override
+    public boolean changePassword(String username, ChangePasswordRequest changePasswordRequest) {
+        // Kiểm tra confirm password khớp với new password
+        if (!changePasswordRequest.getNewPassword().equals(changePasswordRequest.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+        }
+
+        // Tìm user theo username
+        User user = authRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
+
+        PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
+
+        // Kiểm tra current password có đúng không
+        boolean currentPasswordValid = passwordEncoder.matches(
+                changePasswordRequest.getCurrentPassword(),
+                user.getPasswordHash()
+        );
+
+        if (!currentPasswordValid) {
+            throw new AppException(ErrorCode.INVALID_CURRENT_PASSWORD);
+        }
+
+        // Kiểm tra new password không giống current password
+        boolean isSamePassword = passwordEncoder.matches(
+                changePasswordRequest.getNewPassword(),
+                user.getPasswordHash()
+        );
+
+        if (isSamePassword) {
+            throw new AppException(ErrorCode.SAME_PASSWORD);
+        }
+
+        // Mã hóa password mới
+        String newPasswordHash = passwordEncoder.encode(changePasswordRequest.getNewPassword());
+
+        // Cập nhật password trong database
+        user.setPasswordHash(newPasswordHash);
+        authRepository.save(user);
+
+        return true;
     }
 }

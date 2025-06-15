@@ -42,6 +42,36 @@ public class ReviewController {
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
+    @GetMapping("/eligible-hotels")
+    public ResponseEntity<?> getEligibleHotels() {
+        List<Long> eligibleHotelIds = reviewService.getHotelsEligibleForReview();
+
+        ApiResponse<Map<String, Object>> response = new ApiResponse<>();
+        response.setResult(Map.of(
+                "hotelIds", eligibleHotelIds,
+                "count", eligibleHotelIds.size(),
+                "message", eligibleHotelIds.isEmpty() ?
+                        "Không có khách sạn nào có thể đánh giá" :
+                        "Danh sách khách sạn có thể đánh giá"
+        ));
+        response.setCode(HttpStatus.OK.value());
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+    @GetMapping("/can-review/{hotelId}")
+    public ResponseEntity<?> canReviewHotel(@PathVariable Long hotelId) {
+        boolean canReview = reviewService.canUserReviewHotel(hotelId);
+
+        ApiResponse<Map<String, Object>> response = new ApiResponse<>();
+        response.setResult(Map.of(
+                "canReview", canReview,
+                "message", canReview ? "Có thể đánh giá" : "Không thể đánh giá"
+        ));
+        response.setCode(HttpStatus.OK.value());
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
     @DeleteMapping("/delete/{id}")
     public ResponseEntity<?> deleteReview(@PathVariable Long id) {
         reviewService.deleteReview(id);

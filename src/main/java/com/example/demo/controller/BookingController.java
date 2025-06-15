@@ -3,8 +3,10 @@ package com.example.demo.controller;
 import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
 import com.example.demo.dto.booking.BookingStatsResponse;
+import com.example.demo.dto.room.RoomResponse;
 import com.example.demo.response.ApiResponse;
 import com.example.demo.service.booking.BookingService;
+import com.example.demo.service.room.RoomService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -23,6 +25,8 @@ import java.util.List;
 public class BookingController {
 
     private final BookingService bookingService;
+    private final RoomService roomService;
+
 
     /**
      * Tạo booking mới
@@ -290,4 +294,5 @@ public class BookingController {
 
         return ResponseEntity.ok(response);
     }
+
 }

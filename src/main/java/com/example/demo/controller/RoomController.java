@@ -1,14 +1,18 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.room.RoomInvalidRequest;
 import com.example.demo.dto.room.RoomRequest;
 import com.example.demo.dto.room.RoomResponse;
 import com.example.demo.response.ApiResponse;
+import com.example.demo.service.booking.BookingAvailabilityService;
 import com.example.demo.service.room.RoomService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -17,6 +21,7 @@ import java.util.List;
 public class RoomController {
 
     private final RoomService roomService;
+    private final BookingAvailabilityService bookingAvailabilityService;
 
     @PostMapping("/create")
     public ResponseEntity<?> createRoom(@RequestBody RoomRequest request) {
@@ -108,4 +113,20 @@ public class RoomController {
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
+
+    @PostMapping("/roomInvalid")
+    public ResponseEntity<?> checkRoomsInvalid(@RequestBody RoomInvalidRequest request) {
+        boolean isAvailable = bookingAvailabilityService
+                .isSpecificRoomAvailable(request.getRoomId(), request.getCheckIn(), request.getCheckOut());
+
+        ApiResponse<Boolean> response = new ApiResponse<>();
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Kiểm tra phòng thành công");
+        response.setResult(isAvailable);
+
+        return ResponseEntity.ok(response);
+    }
+
+
+
 }

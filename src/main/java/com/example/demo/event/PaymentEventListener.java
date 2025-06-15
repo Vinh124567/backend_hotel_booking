@@ -2,7 +2,9 @@ package com.example.demo.event;
 
 import com.example.demo.dto.booking.BookingStatus;
 import com.example.demo.entity.Booking;
+import com.example.demo.entity.Room;
 import com.example.demo.repository.BookingRepository;
+import com.example.demo.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +19,7 @@ public class PaymentEventListener {
     private static final Logger log = LoggerFactory.getLogger(PaymentEventListener.class);
 
     private final BookingRepository bookingRepository;
+    private final RoomRepository roomRepository;
 
     @EventListener
     @Async
@@ -45,7 +48,14 @@ public class PaymentEventListener {
 
             booking.setStatus(BookingStatus.CONFIRMED);
             bookingRepository.save(booking);
+            Room assignedRoom = booking.getAssignedRoom();
+            if (assignedRoom != null) {
+                assignedRoom.setStatus("Đã đặt"); // hoặc RoomStatus.RESERVED
+                roomRepository.save(assignedRoom);
 
+                log.info("Updated room {} status to 'Đã đặt' after payment for booking {}",
+                        assignedRoom.getRoomNumber(), booking.getId());
+            }
             log.info("Booking {} đã được confirm tự động sau khi thanh toán thành công", bookingId);
 
         } catch (Exception e) {

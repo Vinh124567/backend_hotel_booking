@@ -1,5 +1,7 @@
 package com.example.demo.service.booking;
+
 import com.example.demo.entity.Booking;
+import com.example.demo.entity.Room;
 import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.RoomRepository;
 import com.example.demo.repository.RoomTypeRepository;
@@ -9,45 +11,60 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
 public class BookingAvailabilityService {
     private static final Logger log = LoggerFactory.getLogger(BookingAvailabilityService.class);
-    private static final long TOTAL_ROOMS_PER_TYPE = 5;
 
-    private final BookingRepository bookingRepository;
-    private final RoomTypeRepository roomTypeRepository;
     private final RoomRepository roomRepository;
+    private final RoomTypeRepository roomTypeRepository;
 
+    // ✅ SỬA: Throw exception nếu roomType không tồn tại
     public boolean isRoomTypeAvailable(Long roomTypeId, LocalDate checkInDate, LocalDate checkOutDate) {
-        try {
-            roomTypeRepository.findById(roomTypeId)
-                    .orElseThrow(() -> new RuntimeException("Loại phòng không tồn tại"));
+        roomTypeRepository.findById(roomTypeId)
+                .orElseThrow(() -> new RuntimeException("Loại phòng không tồn tại"));
 
-            long confirmedBookings = bookingRepository.countConfirmedOverlappingBookings(
-                    roomTypeId, checkInDate, checkOutDate);
+        long availableRooms = roomRepository.countAvailableRoomsByTypeAndDates(
+                roomTypeId, checkInDate, checkOutDate);
 
-            return confirmedBookings < TOTAL_ROOMS_PER_TYPE;
-
-        } catch (Exception e) {
-            log.error("Availability check error: ", e);
-            return false;
-        }
+        return availableRooms > 0;
     }
 
-    public boolean hasUserPendingBookingForDates(Long userId, LocalDate checkIn, LocalDate checkOut) {
-        long pendingCount = bookingRepository.countUserPendingBookingsForDates(userId, checkIn, checkOut);
-        return pendingCount > 0;
-    }
-
+    // ✅ Giữ nguyên
     public boolean isRoomTypeAvailableForConfirmation(Booking booking) {
-        long confirmedBookings = bookingRepository.countConfirmedOverlappingBookingsExcluding(
+        long availableRooms = roomRepository.countAvailableRoomsByTypeAndDates(
                 booking.getRoomType().getId(),
                 booking.getCheckInDate(),
-                booking.getCheckOutDate(),
-                booking.getId());
+                booking.getCheckOutDate());
 
-        return confirmedBookings < TOTAL_ROOMS_PER_TYPE;
+        return availableRooms > 0;
     }
+
+    // ✅ Giữ nguyên
+    public Room findAvailableRoom(Long roomTypeId, LocalDate checkInDate, LocalDate checkOutDate) {
+        List<Room> availableRooms = roomRepository.findAvailableRoomsByTypeAndDates(
+                roomTypeId, checkInDate, checkOutDate);
+
+        return availableRooms.isEmpty() ? null : availableRooms.get(0);
+    }
+
+    // ✅ SỬA: Throw lỗi nếu repository lỗi
+    public boolean isSpecificRoomAvailable(Long roomId, LocalDate checkInDate, LocalDate checkOutDate) {
+        // Kiểm tra nếu room không tồn tại
+        roomRepository.findById(roomId)
+                .orElseThrow(() -> new NoSuchElementException("Phòng không tồn tại"));
+
+        boolean available = roomRepository
+                .isRoomAvailableForDates(roomId, checkInDate, checkOutDate, null);
+
+        if (!available) {
+            throw new RuntimeException("Phòng đã được đặt trong khoảng thời gian này, vui lòng chọn khoảng thời gian khác");
+        }
+
+        return true;
+    }
+
 }

@@ -1,6 +1,8 @@
 package com.example.demo.service.user;
 
 import com.example.demo.dto.user.UserRequestDto;
+import com.example.demo.dto.user.UserUpdateDto;
+import com.example.demo.dto.user.UserResponseDto;
 import com.example.demo.entity.User;
 
 import java.util.Optional;
@@ -23,4 +25,17 @@ public interface UserService {
      * @return User hiện tại
      */
     User getCurrentUser();
+
+    /**
+     * Lấy thông tin profile người dùng hiện tại
+     * @return UserResponseDto
+     */
+    UserResponseDto getCurrentUserProfile();
+
+    /**
+     * Cập nhật thông tin người dùng hiện tại
+     * @param updateDto Thông tin cần cập nhật
+     * @return UserResponseDto đã được cập nhật
+     */
+    UserResponseDto updateCurrentUser(UserUpdateDto updateDto);
 }

@@ -18,4 +18,7 @@ public interface ReviewService {
     List<ReviewResponse> getReviewsByUserId(Long userId);
     List<ReviewResponse> getPendingReviews();
     Map<String, Object> getHotelReviewStats(Long hotelId);
+
+    public boolean canUserReviewHotel(Long hotelId);
+    public List<Long> getHotelsEligibleForReview();
 }

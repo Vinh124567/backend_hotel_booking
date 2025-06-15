@@ -13,6 +13,9 @@ public class BookingRequest {
     @Positive(message = "RoomType ID phải là số dương")
     private Long roomTypeId;
 
+    // ✅ THÊM: Optional roomId cho feature chọn phòng cụ thể
+    private Long roomId;
+
     @NotNull(message = "Ngày check-in không được để trống")
     @Future(message = "Ngày check-in phải là tương lai")
     @JsonFormat(pattern = "yyyy-MM-dd")
@@ -51,5 +54,10 @@ public class BookingRequest {
         }
         long days = checkInDate.until(checkOutDate).getDays();
         return days >= 1 && days <= 30;
+    }
+
+    // ✅ THÊM: Helper method
+    public boolean hasSpecificRoomSelected() {
+        return roomId != null;
     }
 }

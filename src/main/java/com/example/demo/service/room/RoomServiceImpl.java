@@ -78,7 +78,7 @@ public class RoomServiceImpl implements RoomService {
                 .orElseThrow(() -> new RuntimeException("RoomType không tồn tại với ID: " + roomTypeId));
 
         // Lấy danh sách phòng theo room type ID
-        List<Room> rooms = roomRepository.findByRoomType_Id(roomTypeId);
+        List<Room> rooms = roomRepository.findByRoomType_IdOrderByRoomNumberAsc(roomTypeId);
 
         // Convert sang DTO
         return rooms.stream()
