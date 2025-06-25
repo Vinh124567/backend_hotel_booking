@@ -84,7 +84,6 @@ public class ReviewController {
     }
 
     @PutMapping("/approve/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_MANAGER')")
     public ResponseEntity<?> approveReview(@PathVariable Long id) {
         reviewService.approveReview(id);
 
@@ -107,7 +106,6 @@ public class ReviewController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_MANAGER')")
     public ResponseEntity<?> getAllReviews() {
         List<ReviewResponse> reviews = reviewService.getAllReviews();
 

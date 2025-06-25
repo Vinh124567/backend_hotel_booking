@@ -3,6 +3,7 @@ package com.example.demo.service.booking;
 import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
 import com.example.demo.dto.booking.BookingStatsResponse;
+import com.example.demo.dto.report.HotelStatsResponse;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -65,6 +66,11 @@ public interface BookingService {
      * Lấy lịch sử check-in/out của user hiện tại
      */
     List<BookingResponse> getCheckHistory();
+
+    List<BookingResponse> getBookingsByHotel(Long hotelId, String status);
+
+    public HotelStatsResponse getHotelRevenue(Long hotelId, LocalDate fromDate, LocalDate toDate, String status) ;
+
 
 //    /**
 //     * Admin: Check-in hàng loạt

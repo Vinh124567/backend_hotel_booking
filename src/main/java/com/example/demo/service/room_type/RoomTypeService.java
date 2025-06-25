@@ -9,5 +9,6 @@ import java.util.List;
 public interface RoomTypeService {
     public RoomType createRoomType(RoomTypeRequest request);
     List<RoomTypeResponse> getRoomTypesByHotelId(Long hotelId);
+    RoomType updateRoomType(Long roomTypeId, RoomTypeRequest request);
 
 }

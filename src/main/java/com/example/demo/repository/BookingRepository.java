@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -379,4 +380,72 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
         )
     """)
     List<Long> findHotelsEligibleForReview(@Param("userId") Long userId);
+
+
+    // ========== BookingRepository.java - METHODS CẦN THÊM ==========
+
+    /**
+     * Đếm booking theo khoảng thời gian (cho dashboard)
+     */
+    @Query("SELECT COUNT(b) FROM Booking b WHERE b.bookingDate BETWEEN :start AND :end")
+    Long countByBookingDateBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    /**
+     * Lấy 10 booking gần nhất với fetch join (tránh N+1 problem)
+     */
+    @Query("""
+    SELECT b FROM Booking b
+    LEFT JOIN FETCH b.user u
+    LEFT JOIN FETCH b.roomType rt
+    LEFT JOIN FETCH rt.hotel h
+    ORDER BY b.bookingDate DESC
+""")
+    List<Booking> findRecentBookingsWithDetails();
+
+    /**
+     * Lấy 10 booking gần nhất - simple version (không fetch)
+     */
+    List<Booking> findTop10ByOrderByBookingDateDesc();
+
+
+    // Lấy booking theo hotelId và status
+    @Query("SELECT b FROM Booking b " +
+            "JOIN b.roomType rt " +
+            "WHERE rt.hotel.id = :hotelId AND b.status = :status " +
+            "ORDER BY b.bookingDate DESC")
+    List<Booking> findByRoomType_Hotel_IdAndStatusOrderByBookingDateDesc(
+            @Param("hotelId") Long hotelId,
+            @Param("status") String status);
+
+    // Lấy tất cả booking theo hotelId
+    @Query("SELECT b FROM Booking b " +
+            "JOIN b.roomType rt " +
+            "WHERE rt.hotel.id = :hotelId " +
+            "ORDER BY b.bookingDate DESC")
+    List<Booking> findByRoomType_Hotel_IdOrderByBookingDateDesc(@Param("hotelId") Long hotelId);
+
+    // Tổng doanh thu với filter
+    @Query("SELECT COALESCE(SUM(b.totalPrice), 0) FROM Booking b " +
+            "WHERE b.roomType.hotel.id = :hotelId " +
+            "AND (:status IS NULL OR b.status = :status) " +
+            "AND b.checkOutDate BETWEEN :fromDate AND :toDate")
+    BigDecimal calculateTotalRevenue(@Param("hotelId") Long hotelId,
+                                     @Param("fromDate") LocalDate fromDate,
+                                     @Param("toDate") LocalDate toDate,
+                                     @Param("status") String status);
+
+    // Doanh thu theo tháng với filter
+    @Query("SELECT YEAR(b.checkOutDate), MONTH(b.checkOutDate), " +
+            "COUNT(b), COALESCE(SUM(b.totalPrice), 0) " +
+            "FROM Booking b " +
+            "WHERE b.roomType.hotel.id = :hotelId " +
+            "AND (:status IS NULL OR b.status = :status) " +
+            "AND b.checkOutDate BETWEEN :fromDate AND :toDate " +
+            "GROUP BY YEAR(b.checkOutDate), MONTH(b.checkOutDate) " +
+            "ORDER BY YEAR(b.checkOutDate), MONTH(b.checkOutDate)")
+    List<Object[]> findMonthlyRevenue(@Param("hotelId") Long hotelId,
+                                      @Param("fromDate") LocalDate fromDate,
+                                      @Param("toDate") LocalDate toDate,
+                                      @Param("status") String status);
+
 }

@@ -42,4 +42,16 @@ public class RoomTypeController {
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
+
+    @PutMapping("/update/{roomTypeId}")
+    public ResponseEntity<?> updateRoomType(@PathVariable Long roomTypeId, @RequestBody RoomTypeRequest request) {
+        RoomType updatedRoomType = roomTypeService.updateRoomType(roomTypeId, request);
+
+        ApiResponse<RoomType> response = new ApiResponse<>();
+        response.setResult(updatedRoomType);
+        response.setMessage("Cập nhật loại phòng thành công");
+        response.setCode(HttpStatus.OK.value());
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
 }

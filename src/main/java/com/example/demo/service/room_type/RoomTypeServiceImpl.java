@@ -101,4 +101,66 @@ public class RoomTypeServiceImpl implements RoomTypeService {
 
         return response;
     }
+
+    // RoomTypeServiceImpl.java - thêm method này vào class
+    @PreAuthorize("hasRole('ADMIN')")
+    @Override
+    public RoomType updateRoomType(Long roomTypeId, RoomTypeRequest request) {
+        // Tìm room type cần update
+        RoomType existingRoomType = roomTypeRepository.findById(roomTypeId)
+                .orElseThrow(() -> new RuntimeException("Loại phòng không tồn tại với ID: " + roomTypeId));
+
+        // Kiểm tra hotel có tồn tại không
+        Hotel hotel = hotelRepository.findById(request.getHotelId())
+                .orElseThrow(() -> new RuntimeException("Hotel không tồn tại với ID: " + request.getHotelId()));
+
+        // Update các field cơ bản
+        existingRoomType.setTypeName(request.getTypeName());
+        existingRoomType.setDescription(request.getDescription());
+        existingRoomType.setMaxOccupancy(request.getMaxOccupancy());
+        existingRoomType.setBasePrice(request.getBasePrice());
+        existingRoomType.setSizeSqm(request.getSizeSqm());
+        existingRoomType.setBedType(request.getBedType());
+        existingRoomType.setHotel(hotel);
+
+        // Update amenities
+        if (request.getAmenityIds() != null) {
+            if (request.getAmenityIds().isEmpty()) {
+                existingRoomType.getAmenities().clear();
+            } else {
+                Set<Amenity> amenities = new HashSet<>(amenityRepository.findAllById(request.getAmenityIds()));
+                existingRoomType.setAmenities(amenities);
+            }
+        }
+
+        // Save room type trước
+        RoomType savedRoomType = roomTypeRepository.save(existingRoomType);
+
+        // Update images
+        if (request.getImageUrls() != null) {
+            // Xóa images cũ
+            if (savedRoomType.getImages() != null) {
+                roomImageRepository.deleteAll(savedRoomType.getImages());
+            }
+
+            // Thêm images mới
+            if (!request.getImageUrls().isEmpty()) {
+                Set<RoomImage> newImages = request.getImageUrls().stream()
+                        .map(url -> {
+                            RoomImage image = new RoomImage();
+                            image.setImageUrl(url);
+                            image.setRoomType(savedRoomType);
+                            return image;
+                        })
+                        .collect(Collectors.toSet());
+
+                roomImageRepository.saveAll(newImages);
+                savedRoomType.setImages(newImages);
+            } else {
+                savedRoomType.setImages(new HashSet<>());
+            }
+        }
+
+        return savedRoomType;
+    }
 }

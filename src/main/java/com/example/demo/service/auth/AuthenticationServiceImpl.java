@@ -67,15 +67,17 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     private String generateToken(User user) {
         String issuer = System.getProperty("spring.application.name");
 
-        JWSHeader header = new JWSHeader(JWSAlgorithm.HS384);
+        JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.HS384)
+                .type(JOSEObjectType.JWT)
+                .build();
 
         JWTClaimsSet jwtClaimsSet = new JWTClaimsSet.Builder()
                 .subject(user.getUsername())
                 .issuer(issuer)
                 .issueTime(new Date())
-//                .expirationTime(new Date(
-//                        Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()
-//                ))
+                .expirationTime(new Date(
+                        Instant.now().plus(10, ChronoUnit.DAYS).toEpochMilli()
+                ))
                 .claim("scope", buildScope(user))
                 .build();
         Payload payload = new Payload(jwtClaimsSet.toJSONObject());

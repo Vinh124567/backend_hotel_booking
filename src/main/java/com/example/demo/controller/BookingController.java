@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
 import com.example.demo.dto.booking.BookingStatsResponse;
+import com.example.demo.dto.report.HotelStatsResponse;
 import com.example.demo.dto.room.RoomResponse;
 import com.example.demo.response.ApiResponse;
 import com.example.demo.service.booking.BookingService;
@@ -15,6 +16,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -295,4 +298,51 @@ public class BookingController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Lấy danh sách booking của một khách sạn cụ thể
+     */
+    @GetMapping("/hotel/{hotelId}")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_STAFF')")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getBookingsByHotel(
+            @PathVariable Long hotelId,
+            @RequestParam(required = false) String status) {
+
+        log.info("Getting bookings for hotel: {}, status: {}", hotelId, status);
+
+        List<BookingResponse> bookings = bookingService.getBookingsByHotel(hotelId, status);
+
+        ApiResponse<List<BookingResponse>> response = new ApiResponse<>();
+        response.setResult(bookings);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy danh sách booking của khách sạn thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Lấy doanh thu theo tháng của khách sạn
+     */
+    @GetMapping("/hotel/{hotelId}/revenue")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('HOTEL_STAFF')")
+    public ResponseEntity<ApiResponse<HotelStatsResponse>> getHotelRevenue(
+            @PathVariable Long hotelId,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String status) {
+
+        log.info("Getting hotel revenue for: {}, status: {}", hotelId, status);
+
+        // Default: 12 tháng gần nhất
+        LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : LocalDate.now().minusMonths(12);
+        LocalDate to = toDate != null ? LocalDate.parse(toDate) : LocalDate.now();
+
+        HotelStatsResponse stats = bookingService.getHotelRevenue(hotelId, from, to, status);
+
+        ApiResponse<HotelStatsResponse> response = new ApiResponse<>();
+        response.setResult(stats);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Lấy doanh thu thành công");
+
+        return ResponseEntity.ok(response);
+    }
 }

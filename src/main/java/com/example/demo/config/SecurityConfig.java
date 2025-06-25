@@ -89,7 +89,8 @@ public class SecurityConfig {
             "/api/v1/favorites/**",
             // ❌ XÓA DÒNG NÀY: "/api/v1/payments/**",
             "/api/v1/payments/admin/**",  // ✅ CHỈ ADMIN PAYMENT ENDPOINTS
-            "/api/v1/bookings/**"
+            "/api/v1/bookings/**",
+            "api/v1/admin/dashboard/**"
     };
 
     String signerKey = "9o75HYyiqLhhK91+pvVoDsJ3p+oRd6n3iapvj9Hx8uwvcqWIEVDcAgNnz7gG0rTX";

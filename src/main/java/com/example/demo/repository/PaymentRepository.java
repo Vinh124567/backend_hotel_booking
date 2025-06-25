@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,4 +41,18 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     @Query("SELECT COUNT(p) FROM Payment p WHERE p.paymentStatus = 'Đã thanh toán' AND DATE(p.paymentDate) = CURRENT_DATE")
     Long countTodayPaidPayments();
+
+    // ========== DASHBOARD QUERIES (THÊM VÀO PaymentRepository) ==========
+
+    /**
+     * Đếm payment theo status (cho dashboard)
+     */
+    @Query("SELECT COUNT(p) FROM Payment p WHERE p.paymentStatus = :paymentStatus")
+    Long countByPaymentStatus(@Param("paymentStatus") String paymentStatus);
+
+    /**
+     * Tính tổng doanh thu hôm nay (cho dashboard)
+     */
+    @Query("SELECT SUM(p.amount) FROM Payment p WHERE p.paymentStatus = 'Đã thanh toán' AND DATE(p.paymentDate) = :date")
+    Optional<BigDecimal> getTodayRevenue(@Param("date") LocalDate date);
 }

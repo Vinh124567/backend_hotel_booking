@@ -4,6 +4,7 @@ import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
 import com.example.demo.dto.booking.BookingStatsResponse;
 import com.example.demo.dto.booking.BookingStatus;
+import com.example.demo.dto.report.HotelStatsResponse;
 import com.example.demo.entity.*;
 import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.RoomRepository;
@@ -21,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -418,4 +420,59 @@ public class BookingServiceImpl implements BookingService {
             }
         }
     }
+
+    @Override
+    public List<BookingResponse> getBookingsByHotel(Long hotelId, String status) {
+        List<Booking> bookings;
+
+        if (status != null && !status.trim().isEmpty()) {
+            bookings = bookingRepository.findByRoomType_Hotel_IdAndStatusOrderByBookingDateDesc(hotelId, status);
+        } else {
+            bookings = bookingRepository.findByRoomType_Hotel_IdOrderByBookingDateDesc(hotelId);
+        }
+
+        return bookings.stream()
+                .map(mappingService::mapToBookingResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public HotelStatsResponse getHotelRevenue(Long hotelId, LocalDate fromDate, LocalDate toDate, String status) {
+        // Tổng doanh thu
+        BigDecimal totalRevenue = bookingRepository.calculateTotalRevenue(hotelId, fromDate, toDate, status);
+
+        // Doanh thu theo tháng
+        List<Object[]> monthlyData = bookingRepository.findMonthlyRevenue(hotelId, fromDate, toDate, status);
+
+        List<HotelStatsResponse.MonthlyRevenue> monthlyRevenues = monthlyData.stream()
+                .map(row -> {
+                    Integer year = (Integer) row[0];
+                    Integer month = (Integer) row[1];
+                    Long bookings = (Long) row[2];
+                    BigDecimal revenue = (BigDecimal) row[3];
+
+                    return HotelStatsResponse.MonthlyRevenue.builder()
+                            .month(String.format("%d-%02d", year, month))
+                            .displayMonth(String.format("Tháng %d/%d", month, year))
+                            .revenue(revenue)
+                            .bookings(bookings)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        // Tính stats cơ bản
+        Long totalBookings = monthlyRevenues.stream().mapToLong(HotelStatsResponse.MonthlyRevenue::getBookings).sum();
+        Long completedBookings = bookingRepository.calculateTotalRevenue(hotelId, fromDate, toDate, "Hoàn thành").equals(BigDecimal.ZERO) ? 0L : totalBookings;
+        Long cancelledBookings = bookingRepository.calculateTotalRevenue(hotelId, fromDate, toDate, "Đã hủy").equals(BigDecimal.ZERO) ? 0L : 0L;
+
+        return HotelStatsResponse.builder()
+                .totalRevenue(totalRevenue)
+                .totalBookings(totalBookings)
+                .completedBookings(completedBookings)
+                .cancelledBookings(cancelledBookings)
+                .monthlyRevenues(monthlyRevenues)
+                .build();
+    }
+
+
 }
