@@ -448,4 +448,57 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                                       @Param("toDate") LocalDate toDate,
                                       @Param("status") String status);
 
+        @Query("""
+        SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END
+        FROM Booking b 
+        WHERE b.roomType.id = :roomTypeId 
+        AND b.status IN ('Tạm giữ chỗ', 'Chờ xác nhận', 'Đã xác nhận', 'Đã nhận phòng')
+        AND (:excludeBookingId IS NULL OR b.id <> :excludeBookingId)
+        AND NOT (b.checkOutDate <= :checkInDate OR b.checkInDate >= :checkOutDate)
+    """)
+        boolean hasBookingConflict(
+                @Param("roomTypeId") Long roomTypeId,
+                @Param("checkInDate") LocalDate checkInDate,
+                @Param("checkOutDate") LocalDate checkOutDate,
+                @Param("excludeBookingId") Long excludeBookingId
+        );
+
+        // ✅ OVERLOAD for new bookings (no exclude)
+        default boolean hasBookingConflict(Long roomTypeId, LocalDate checkInDate, LocalDate checkOutDate) {
+            return hasBookingConflict(roomTypeId, checkInDate, checkOutDate, null);
+        }
+
+        // ✅ MISSING: Check specific room conflict (not room type)
+        @Query("""
+        SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END
+        FROM Booking b 
+        WHERE b.assignedRoom.id = :roomId 
+        AND b.status IN ('Tạm giữ chỗ', 'Chờ xác nhận', 'Đã xác nhận', 'Đã nhận phòng')
+        AND (:excludeBookingId IS NULL OR b.id <> :excludeBookingId)
+        AND NOT (b.checkOutDate <= :checkInDate OR b.checkInDate >= :checkOutDate)
+    """)
+        boolean hasRoomConflict(
+                @Param("roomId") Long roomId,
+                @Param("checkInDate") LocalDate checkInDate,
+                @Param("checkOutDate") LocalDate checkOutDate,
+                @Param("excludeBookingId") Long excludeBookingId
+        );
+
+        // ✅ MISSING: Find pending bookings by status list
+        @Query("""
+        SELECT b FROM Booking b 
+        WHERE b.user.id = :userId 
+        AND b.status IN :statuses
+        ORDER BY b.bookingDate DESC
+    """)
+        List<Booking> findByUserIdAndStatusIn(@Param("userId") Long userId, @Param("statuses") List<String> statuses);
+
+        // ✅ MISSING: Count bookings by multiple statuses
+        @Query("""
+        SELECT COUNT(b) FROM Booking b 
+        WHERE b.user.id = :userId 
+        AND b.status IN :statuses
+    """)
+        long countByUserIdAndStatusIn(@Param("userId") Long userId, @Param("statuses") List<String> statuses);
+
 }

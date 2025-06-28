@@ -25,18 +25,11 @@ public class SecurityConfig {
 
     // Endpoint công khai - không cần xác thực
     private final String[] PUBLIC_ENDPOINTS = {
-            // Auth - đăng nhập, đăng ký
             "/api/v1/auth/**",
-
-            // Hiển thị sản phẩm, danh mục công khai
             "/api/v1/coffee/public/**",
             "/api/v1/categories/public/**",
-
-            // Thông tin voucher công khai
             "/api/v1/voucher/public/**",
             "api/v1/room/**",
-
-            // ✅ THÊM PAYMENT PUBLIC ENDPOINTS
             "/api/v1/payments/health",
             "/api/v1/payments/*/status",
             "/api/v1/payments/*/check-momo",
@@ -46,11 +39,6 @@ public class SecurityConfig {
             "/api/payments/config/debug"
     };
 
-    // ✅ PAYMENT ENDPOINTS CẦN AUTHENTICATION NHƯNG KHÔNG CẦN ADMIN
-    private final String[] PAYMENT_ENDPOINTS = {
-            "/api/v1/payments"  // POST create payment - cần auth nhưng không cần admin
-    };
-
     // Endpoint cho hình ảnh
     private final String[] PUBLIC_IMAGE_ENDPOINT = {
             "/uploads/**"
@@ -58,20 +46,13 @@ public class SecurityConfig {
 
     // Endpoint yêu cầu xác thực người dùng thông thường
     private final String[] USER_ENDPOINTS = {
-            // Thông tin người dùng
             "/api/v1/users/profile/**",
-
-            // Giỏ hàng, đặt hàng
             "/api/v1/cart/**",
             "/api/v1/orders/user/**",
             "/api/v1/order-items/user/**",
-
-            // Địa chỉ người dùng
             "/api/v1/address/**",
-
             "api/v1/hotel/**",
-            "/api/v1/locations",
-            "/api/v1/locations",
+            "/api/v1/locations"
     };
 
     // Endpoint dành cho quản trị viên
@@ -83,13 +64,11 @@ public class SecurityConfig {
             "/api/v1/orders/admin/**",
             "/api/v1/users/admin/**",
             "/api/v1/amenity/**",
-            "/api/v1/room-type/**",
             "/api/v1/room-images/**",
-            "/api/v1/reviews/**",
-            "/api/v1/favorites/**",
-            // ❌ XÓA DÒNG NÀY: "/api/v1/payments/**",
-            "/api/v1/payments/admin/**",  // ✅ CHỈ ADMIN PAYMENT ENDPOINTS
-            "/api/v1/bookings/**",
+            // ❌ REMOVED: "/api/v1/reviews/**",
+            // ❌ REMOVED: "/api/v1/favorites/**",
+            // ❌ REMOVED: "/api/v1/bookings/**", ← MOVED TO SPECIFIC RULES
+            "/api/v1/payments/admin/**",
             "api/v1/admin/dashboard/**"
     };
 
@@ -104,27 +83,66 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
         httpSecurity.authorizeHttpRequests(request ->
                 request
-                        // ✅ Cho phép truy cập không xác thực tới các endpoint công khai
+                        // ✅ Public endpoints
                         .requestMatchers(HttpMethod.GET, PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers("/api/payments/**").permitAll()
                         .requestMatchers("/api/v1/payments/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/payments/callback").permitAll() // ✅ MoMo callback
-                        .requestMatchers(HttpMethod.GET, "/api/payments/callback").permitAll()  // ✅ MoMo redirect
+                        .requestMatchers(HttpMethod.POST, "/api/payments/callback").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/callback").permitAll()
                         .requestMatchers(PUBLIC_IMAGE_ENDPOINT).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
 
-                        // ✅ Payment endpoints cần auth nhưng không cần admin
+                        // ✅ BOOKINGS ENDPOINTS - Granular permissions
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bookings/pending").authenticated()       // USER can view their pending bookings
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bookings/confirmed").authenticated()     // USER can view their confirmed bookings
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bookings/completed").authenticated()     // USER can view their completed bookings
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bookings/cancelled").authenticated()     // USER can view their cancelled bookings
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bookings/user/**").authenticated()       // USER can view their own bookings
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bookings/*").authenticated()             // USER can view specific booking details
+                        .requestMatchers(HttpMethod.POST, "/api/v1/bookings").authenticated()              // USER can create bookings
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/bookings/*/cancel").authenticated()      // USER can cancel their own bookings
+
+                        // Only ADMIN can manage all bookings
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bookings/admin/**").hasRole("ADMIN")     // Admin view all bookings
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/bookings/*/approve").hasRole("ADMIN")    // Admin approve bookings
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/bookings/*/reject").hasRole("ADMIN")     // Admin reject bookings
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/bookings/**").hasRole("ADMIN")       // Admin delete bookings
+
+                        // ✅ ROOM TYPE ENDPOINTS
+                        .requestMatchers(HttpMethod.GET, "/api/v1/room-type/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/room-type/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/room-type/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/room-type/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/room-type/**").hasRole("ADMIN")
+
+                        // ✅ REVIEWS ENDPOINTS
+                        .requestMatchers(HttpMethod.GET, "/api/v1/reviews/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/reviews/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/reviews/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/reviews/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/reviews/**").hasRole("ADMIN")
+
+                        // ✅ FAVORITES ENDPOINTS
+                        .requestMatchers(HttpMethod.GET, "/api/v1/favorites/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/favorites/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/favorites/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/favorites/**").hasRole("ADMIN")
+
+                        // ✅ Payment endpoints
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/payments/*").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/payments/*/status").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/payments/*").hasRole("ADMIN")
 
-                        // Yêu cầu vai trò ADMIN cho các endpoint quản trị
+                        // ✅ USER endpoints
+                        .requestMatchers(USER_ENDPOINTS).authenticated()
+
+                        // ✅ ADMIN endpoints
                         .requestMatchers(ADMIN_ENDPOINTS).hasRole("ADMIN")
 
-                        // Yêu cầu xác thực cho tất cả các yêu cầu khác
+                        // ✅ All other requests need authentication
                         .anyRequest().authenticated());
 
         httpSecurity.oauth2ResourceServer(oauth2 ->
@@ -140,7 +158,6 @@ public class SecurityConfig {
     JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
         jwtGrantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
-        // This is the important line - set claim name to "scope"
         jwtGrantedAuthoritiesConverter.setAuthoritiesClaimName("scope");
 
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
@@ -150,10 +167,10 @@ public class SecurityConfig {
 
     @Bean
     JwtDecoder jwtDecoder() {
-        SecretKeySpec secretKeySpec = new SecretKeySpec(signerKey.getBytes(), "HS384");  // Change to HS384
+        SecretKeySpec secretKeySpec = new SecretKeySpec(signerKey.getBytes(), "HS384");
         return NimbusJwtDecoder
                 .withSecretKey(secretKeySpec)
-                .macAlgorithm(MacAlgorithm.HS384)  // Change to match token generation
+                .macAlgorithm(MacAlgorithm.HS384)
                 .build();
     }
 }

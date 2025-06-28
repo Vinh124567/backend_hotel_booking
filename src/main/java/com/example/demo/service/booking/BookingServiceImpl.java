@@ -62,20 +62,12 @@ public class BookingServiceImpl implements BookingService {
         RoomType roomType = roomTypeRepository.findById(request.getRoomTypeId())
                 .orElseThrow(() -> new RuntimeException("Loại phòng không tồn tại với ID: " + request.getRoomTypeId()));
 
-//        if (availabilityService.hasUserPendingBookingForDates(currentUser.getId(),
-//                request.getCheckInDate(), request.getCheckOutDate())) {
-//            throw new RuntimeException("Bạn đã có booking đang chờ thanh toán cho thời gian này");
-//        }
-
-        // ✅ THÊM: Handle 2 flows khác nhau
         Room assignedRoom = null;
 
         if (request.hasSpecificRoomSelected()) {
-            // Flow 1: User chọn phòng cụ thể
             assignedRoom = validateAndGetSpecificRoom(request);
             log.info("User selected specific room: {}", assignedRoom.getRoomNumber());
         } else {
-            // Flow 2: User chỉ chọn roomType, check availability tổng quát
             if (!availabilityService.isRoomTypeAvailable(request.getRoomTypeId(),
                     request.getCheckInDate(), request.getCheckOutDate())) {
                 throw new RuntimeException("Loại phòng không khả dụng trong thời gian đã chọn");
@@ -85,7 +77,6 @@ public class BookingServiceImpl implements BookingService {
 
         Booking booking = createBookingEntity(currentUser, roomType, request);
 
-        // ✅ Assign room ngay nếu user đã chọn cụ thể
         if (assignedRoom != null) {
             booking.setAssignedRoom(assignedRoom);
         }
@@ -99,12 +90,10 @@ public class BookingServiceImpl implements BookingService {
         Room room = roomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new RuntimeException("Phòng không tồn tại với ID: " + request.getRoomId()));
 
-        // Validate room thuộc đúng roomType
         if (!room.getRoomType().getId().equals(request.getRoomTypeId())) {
             throw new RuntimeException("Phòng không thuộc loại phòng đã chọn");
         }
 
-        // Validate room có available không
         if (!availabilityService.isSpecificRoomAvailable(request.getRoomId(),
                 request.getCheckInDate(), request.getCheckOutDate())) {
             throw new RuntimeException("Phòng " + room.getRoomNumber() + " không khả dụng trong thời gian đã chọn");
@@ -130,7 +119,6 @@ public class BookingServiceImpl implements BookingService {
             throw new RuntimeException("Phòng không còn khả dụng");
         }
 
-        // ✅ THÊM: Assign room cụ thể khi confirm
         if (booking.getAssignedRoom() == null) {
             Room availableRoom = availabilityService.findAvailableRoom(
                     booking.getRoomType().getId(),
@@ -152,19 +140,28 @@ public class BookingServiceImpl implements BookingService {
         return mappingService.mapToBookingResponse(booking);
     }
 
+    // ✅ FIXED: Cancel booking with admin permission
     @Override
     public BookingResponse cancelBooking(Long bookingId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đặt phòng với ID: " + bookingId));
 
         User currentUser = userService.getCurrentUser();
-        validationService.validateBookingOwnership(booking, currentUser);
+
+        // ✅ Check admin first, bypass ownership for admin
+        boolean isAdmin = isUserAdmin(currentUser);
+        if (!isAdmin) {
+            // Only validate ownership for non-admin users
+            validationService.validateBookingOwnership(booking, currentUser);
+        }
+
+        // ✅ Always validate business rules
         validationService.validateCancellation(booking);
 
         booking.setStatus(BookingStatus.CANCELLED);
         Room assignedRoom = booking.getAssignedRoom();
         if (assignedRoom != null) {
-            assignedRoom.setStatus("Trống"); // hoặc RoomStatus.AVAILABLE
+            assignedRoom.setStatus("Trống");
             roomRepository.save(assignedRoom);
 
             log.info("Updated room {} status to 'Trống' on booking cancellation",
@@ -192,9 +189,20 @@ public class BookingServiceImpl implements BookingService {
     public BookingResponse getBookingById(Long bookingId) {
         Booking booking = bookingRepository.findByIdWithDetails(bookingId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đặt phòng với ID: " + bookingId));
+
+        // ✅ ADDED: Check permission for viewing booking details
+        User currentUser = userService.getCurrentUser();
+        boolean isAdmin = isUserAdmin(currentUser);
+
+        if (!isAdmin) {
+            // Non-admin users can only view their own bookings
+            validationService.validateBookingOwnership(booking, currentUser);
+        }
+
         return mappingService.mapToBookingResponse(booking);
     }
 
+    // ✅ FIXED: Check-in with admin permission (already fixed)
     @Transactional
     @Override
     public BookingResponse checkInBooking(Long bookingId) {
@@ -202,10 +210,15 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đặt phòng với ID: " + bookingId));
 
-        validationService.validateBookingOwnership(booking, currentUser);
+        // ✅ Check admin first, bypass ownership for admin
+        boolean isAdmin = isUserAdmin(currentUser);
+        if (!isAdmin) {
+            throw new RuntimeException("Chỉ admin mới có thể thực hiện check-in");
+        }
+
+        // ✅ Validate business rules
         validationService.validateCheckIn(booking);
 
-        // ✅ THÊM: Đảm bảo có room được assign trước khi check-in
         if (booking.getAssignedRoom() == null) {
             Room availableRoom = availabilityService.findAvailableRoom(
                     booking.getRoomType().getId(),
@@ -235,19 +248,26 @@ public class BookingServiceImpl implements BookingService {
         return mappingService.mapToBookingResponse(booking);
     }
 
+    // ✅ FIXED: Check-out with admin permission
     @Override
     public BookingResponse checkOutBooking(Long bookingId) {
         User currentUser = userService.getCurrentUser();
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đặt phòng với ID: " + bookingId));
 
-        validationService.validateBookingOwnership(booking, currentUser);
+        // ✅ Check admin first, bypass ownership for admin
+        boolean isAdmin = isUserAdmin(currentUser);
+        if (!isAdmin) {
+            throw new RuntimeException("Chỉ admin mới có thể thực hiện check-out");
+        }
+
+        // ✅ Validate business rules
         validationService.validateCheckOut(booking);
 
         booking.setStatus(BookingStatus.COMPLETED);
         Room assignedRoom = booking.getAssignedRoom();
         if (assignedRoom != null) {
-            assignedRoom.setStatus("Trống"); // hoặc RoomStatus.AVAILABLE
+            assignedRoom.setStatus("Trống");
             roomRepository.save(assignedRoom);
 
             log.info("Updated room {} status to 'Trống' on check-out",
@@ -258,13 +278,21 @@ public class BookingServiceImpl implements BookingService {
         return mappingService.mapToBookingResponse(booking);
     }
 
+    // ✅ FIXED: Update booking with admin permission
     @Override
     public BookingResponse updateBooking(Long bookingId, BookingRequest request) {
         User currentUser = userService.getCurrentUser();
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đặt phòng với ID: " + bookingId));
 
-        validationService.validateBookingOwnership(booking, currentUser);
+        // ✅ Check admin first, bypass ownership for admin
+        boolean isAdmin = isUserAdmin(currentUser);
+        if (!isAdmin) {
+            // Only validate ownership for non-admin users
+            validationService.validateBookingOwnership(booking, currentUser);
+        }
+
+        // ✅ Always validate business rules
         validationService.validateModification(booking);
 
         updateBookingFields(booking, request);
@@ -301,7 +329,6 @@ public class BookingServiceImpl implements BookingService {
             if (hasSuccessfulPayment) {
                 booking.setStatus(BookingStatus.CONFIRMED);
 
-                // ✅ THÊM: Auto-assign room khi payment success
                 if (booking.getAssignedRoom() == null) {
                     Room availableRoom = availabilityService.findAvailableRoom(
                             booking.getRoomType().getId(),
@@ -337,6 +364,18 @@ public class BookingServiceImpl implements BookingService {
         }
     }
 
+    // ===================================================================
+    // UTILITY METHODS
+    // ===================================================================
+
+    /**
+     * ✅ Helper method to check if user is admin
+     */
+    private boolean isUserAdmin(User user) {
+        return user.getRoles().stream()
+                .anyMatch(role -> "ADMIN".equals(role.getName()));
+    }
+
     private Booking createBookingEntity(User user, RoomType roomType, BookingRequest request) {
         Booking booking = new Booking();
         booking.setUser(user);
@@ -363,7 +402,6 @@ public class BookingServiceImpl implements BookingService {
                 .filter(b -> List.of(statuses).contains(b.getStatus()))
                 .count();
     }
-
 
     private Double calculateTotalSpent(List<Booking> bookings) {
         return bookings.stream()
@@ -438,10 +476,8 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     public HotelStatsResponse getHotelRevenue(Long hotelId, LocalDate fromDate, LocalDate toDate, String status) {
-        // Tổng doanh thu
         BigDecimal totalRevenue = bookingRepository.calculateTotalRevenue(hotelId, fromDate, toDate, status);
 
-        // Doanh thu theo tháng
         List<Object[]> monthlyData = bookingRepository.findMonthlyRevenue(hotelId, fromDate, toDate, status);
 
         List<HotelStatsResponse.MonthlyRevenue> monthlyRevenues = monthlyData.stream()
@@ -460,7 +496,6 @@ public class BookingServiceImpl implements BookingService {
                 })
                 .collect(Collectors.toList());
 
-        // Tính stats cơ bản
         Long totalBookings = monthlyRevenues.stream().mapToLong(HotelStatsResponse.MonthlyRevenue::getBookings).sum();
         Long completedBookings = bookingRepository.calculateTotalRevenue(hotelId, fromDate, toDate, "Hoàn thành").equals(BigDecimal.ZERO) ? 0L : totalBookings;
         Long cancelledBookings = bookingRepository.calculateTotalRevenue(hotelId, fromDate, toDate, "Đã hủy").equals(BigDecimal.ZERO) ? 0L : 0L;
@@ -473,6 +508,4 @@ public class BookingServiceImpl implements BookingService {
                 .monthlyRevenues(monthlyRevenues)
                 .build();
     }
-
-
 }

@@ -3,11 +3,13 @@ package com.example.demo.service.hotel;
 import com.example.demo.dto.amenity.AmenityResponse;
 import com.example.demo.dto.hotel.HotelRequest;
 import com.example.demo.dto.hotel.HotelResponse;
+import com.example.demo.dto.hotel_image.HotelImageRequest;
 import com.example.demo.dto.hotel_image.HotelImageResponse;
 import com.example.demo.dto.room_type.RoomTypeResponse;
 import com.example.demo.entity.*;
 import com.example.demo.repository.*;
 import com.example.demo.utils.ImageUtils;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
@@ -86,48 +88,151 @@ public class HotelServiceImpl implements HotelService {
     }
 
     @Override
+    @Transactional
     public Hotel updateHotel(Long id, HotelRequest request) {
-        Hotel hotel = hotelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy khách sạn với ID: " + id));
+        System.out.println("🔍 === UPDATE HOTEL START ===");
+        System.out.println("🔍 Hotel ID: " + id);
 
-        // Cập nhật các trường thông tin cơ bản
-        modelMapper.map(request, hotel);
+        try {
+            // ✅ Tìm hotel
+            Hotel hotel = hotelRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy khách sạn với ID: " + id));
 
-        // Cập nhật location
-        Location location = locationRepository.findById(request.getLocationId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy location với ID: " + request.getLocationId()));
-        hotel.setLocation(location);
+            System.out.println("🔍 Found hotel: " + hotel.getHotelName());
 
-        // Cập nhật amenities
-        if (request.getAmenityIds() != null) {
-            Set<Amenity> amenities = new HashSet<>(amenityRepository.findAllById(request.getAmenityIds()));
-            hotel.setAmenities(amenities);
+            // ✅ Cập nhật các trường thông tin cơ bản
+            modelMapper.map(request, hotel);
+
+            // ✅ Cập nhật location
+            if (request.getLocationId() != null) {
+                Location location = locationRepository.findById(request.getLocationId())
+                        .orElseThrow(() -> new RuntimeException("Không tìm thấy location với ID: " + request.getLocationId()));
+                hotel.setLocation(location);
+                System.out.println("🔍 Updated location: " + location.getCityName());
+            }
+
+            // ✅ Cập nhật amenities
+            if (request.getAmenityIds() != null) {
+                Set<Amenity> amenities = new HashSet<>(amenityRepository.findAllById(request.getAmenityIds()));
+                hotel.setAmenities(amenities);
+                System.out.println("🔍 Updated amenities count: " + amenities.size());
+            }
+
+            // ✅ Cập nhật hình ảnh - LOGIC CHÍNH XÁC
+            if (request.getImages() != null) {
+                System.out.println("🔍 === UPDATING IMAGES ===");
+                System.out.println("🔍 Number of images in request: " + request.getImages().size());
+
+                // ✅ Xóa tất cả ảnh cũ
+                if (hotel.getImages() != null && !hotel.getImages().isEmpty()) {
+                    System.out.println("🔍 Deleting " + hotel.getImages().size() + " old images");
+                    hotelImageRepository.deleteAll(hotel.getImages());
+                    hotel.getImages().clear();
+                }
+
+                // ✅ Xử lý từng ảnh mới
+                Set<HotelImage> newHotelImages = new HashSet<>();
+
+                for (int i = 0; i < request.getImages().size(); i++) {
+                    HotelImageRequest imageRequest = request.getImages().get(i);
+
+                    System.out.println("🔍 --- Processing image " + (i + 1) + " ---");
+                    System.out.println("🔍 Image URL length: " + imageRequest.getImageUrl().length());
+                    System.out.println("🔍 Is base64: " + ImageUtils.isBase64(imageRequest.getImageUrl()));
+                    System.out.println("🔍 Is URL: " + ImageUtils.isUrl(imageRequest.getImageUrl()));
+
+                    try {
+                        HotelImage hotelImage = new HotelImage();
+                        String finalImageUrl;
+
+                        // ✅ Phân biệt base64 và URL hiện có
+                        if (ImageUtils.isBase64(imageRequest.getImageUrl())) {
+                            // Đây là ảnh mới (base64) -> cần convert thành file
+                            System.out.println("🔍 Converting base64 to file...");
+                            finalImageUrl = ImageUtils.saveBase64Image(imageRequest.getImageUrl());
+                            System.out.println("✅ Converted to URL: " + finalImageUrl);
+
+                        } else if (ImageUtils.isUrl(imageRequest.getImageUrl())) {
+                            // Đây là URL hiện có -> giữ nguyên
+                            finalImageUrl = imageRequest.getImageUrl();
+                            System.out.println("✅ Keeping existing URL: " + finalImageUrl);
+
+                        } else {
+                            // Trường hợp không xác định
+                            System.err.println("❌ Unknown image format: " + imageRequest.getImageUrl().substring(0, Math.min(50, imageRequest.getImageUrl().length())));
+                            throw new RuntimeException("Định dạng ảnh không hợp lệ");
+                        }
+
+                        // ✅ Validate URL cuối cùng
+                        if (finalImageUrl == null || finalImageUrl.trim().isEmpty()) {
+                            throw new RuntimeException("URL ảnh không hợp lệ sau xử lý");
+                        }
+
+                        if (finalImageUrl.length() > 1000) { // Giới hạn an toàn
+                            throw new RuntimeException("URL ảnh quá dài: " + finalImageUrl.length() + " ký tự");
+                        }
+
+                        // ✅ Đảm bảo URL không phải base64
+                        if (ImageUtils.isBase64(finalImageUrl)) {
+                            throw new RuntimeException("❌ CRITICAL: Đang cố lưu base64 vào database!");
+                        }
+
+                        // ✅ Set các thuộc tính
+                        hotelImage.setImageUrl(finalImageUrl);
+                        hotelImage.setHotel(hotel);
+                        hotelImage.setCaption(imageRequest.getCaption() != null ? imageRequest.getCaption() : "");
+                        hotelImage.setIsPrimary(imageRequest.getIsPrimary() != null ? imageRequest.getIsPrimary() : false);
+
+                        newHotelImages.add(hotelImage);
+
+                        System.out.println("✅ Image " + (i + 1) + " processed successfully");
+
+                    } catch (Exception e) {
+                        System.err.println("❌ Error processing image " + (i + 1) + ": " + e.getMessage());
+                        e.printStackTrace();
+                        throw new RuntimeException("Lỗi xử lý ảnh " + (i + 1) + ": " + e.getMessage());
+                    }
+                }
+
+                // ✅ Lưu tất cả ảnh mới vào database
+                if (!newHotelImages.isEmpty()) {
+                    System.out.println("🔍 Saving " + newHotelImages.size() + " images to database...");
+
+                    try {
+                        Set<HotelImage> savedImages = new HashSet<>(hotelImageRepository.saveAll(newHotelImages));
+                        hotel.setImages(savedImages);
+                        System.out.println("✅ All images saved to database successfully");
+
+                        // Debug: In ra thông tin ảnh đã lưu
+                        for (HotelImage img : savedImages) {
+                            System.out.println("🔍 Saved image ID: " + img.getId() + ", URL length: " + img.getImageUrl().length());
+                        }
+
+                    } catch (Exception e) {
+                        System.err.println("❌ Database error saving images: " + e.getMessage());
+                        e.printStackTrace();
+                        throw new RuntimeException("Lỗi lưu ảnh vào database: " + e.getMessage());
+                    }
+                } else {
+                    System.out.println("🔍 No images to save");
+                }
+
+                System.out.println("🔍 === IMAGES UPDATE COMPLETED ===");
+            }
+
+            // ✅ Lưu hotel
+            System.out.println("🔍 Saving hotel to database...");
+            Hotel savedHotel = hotelRepository.save(hotel);
+            System.out.println("✅ Hotel saved successfully");
+
+            System.out.println("🔍 === UPDATE HOTEL COMPLETED ===");
+            return savedHotel;
+
+        } catch (Exception e) {
+            System.err.println("❌ Error in updateHotel: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Lỗi cập nhật khách sạn: " + e.getMessage());
         }
-
-        // Cập nhật hình ảnh (xóa cũ - thêm mới với xử lý base64)
-        if (request.getImages() != null) {
-            // Xóa ảnh cũ
-            hotelImageRepository.deleteAll(hotel.getImages());
-
-            // Lưu ảnh mới từ base64
-            Set<HotelImage> hotelImages = request.getImages().stream()
-                    .map(imageRequest -> {
-                        HotelImage image = new HotelImage();
-
-                        // Lưu ảnh và lấy URL
-                        String imageUrl = saveBase64Image(imageRequest.getImageUrl());
-                        image.setImageUrl(imageUrl);
-
-                        image.setHotel(hotel);
-                        return image;
-                    })
-                    .collect(Collectors.toSet());
-
-            hotelImageRepository.saveAll(hotelImages);
-            hotel.setImages(hotelImages);
-        }
-
-        return hotelRepository.save(hotel);
     }
 
     @Override
@@ -228,15 +333,9 @@ public class HotelServiceImpl implements HotelService {
 
         // Chỉ lấy hình ảnh chính hoặc hình đầu tiên
         if (hotel.getImages() != null && !hotel.getImages().isEmpty()) {
-            List<HotelImageResponse> imageResponses = new ArrayList<>();
-
-            // Tìm ảnh chính hoặc lấy ảnh đầu tiên
-            HotelImage primaryImage = hotel.getImages().stream()
-                    .filter(image -> Boolean.TRUE.equals(image.getIsPrimary()))
-                    .findFirst()
-                    .orElse(hotel.getImages().iterator().next());
-
-            imageResponses.add(modelMapper.map(primaryImage, HotelImageResponse.class));
+            List<HotelImageResponse> imageResponses = hotel.getImages().stream()
+                    .map(image -> modelMapper.map(image, HotelImageResponse.class))
+                    .collect(Collectors.toList());
             response.setImages(imageResponses);
         }
 

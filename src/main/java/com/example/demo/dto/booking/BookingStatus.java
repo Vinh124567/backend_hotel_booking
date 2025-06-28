@@ -1,7 +1,8 @@
 package com.example.demo.dto.booking;
 
 public final class BookingStatus {
-
+    public static final String DEPOSIT_PAID = "Đã đặt cọc";
+    public static final String FULL_PAID = "Đã thanh toán đầy đủ";
     public static final String TEMPORARY = "Tạm giữ chỗ";
     public static final String PENDING = "Chờ xác nhận";
     public static final String CONFIRMED = "Đã xác nhận";
@@ -40,5 +41,11 @@ public final class BookingStatus {
         return TEMPORARY.equals(status) ||
                 PENDING.equals(status) ||
                 CONFIRMED.equals(status);
+    }
+
+    public static boolean requiresAdminNotification(String status) {
+        return CONFIRMED.equals(status) ||
+                DEPOSIT_PAID.equals(status) ||
+                FULL_PAID.equals(status);
     }
 }
