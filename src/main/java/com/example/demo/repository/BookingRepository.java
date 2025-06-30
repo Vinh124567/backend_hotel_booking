@@ -501,4 +501,14 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     """)
         long countByUserIdAndStatusIn(@Param("userId") Long userId, @Param("statuses") List<String> statuses);
 
+    // ✅ THÊM VÀO BookingRepository.java
+
+    @Query("""
+    SELECT b FROM Booking b 
+    WHERE b.status = 'Đã thanh toán' 
+    AND b.checkInDate < :yesterday
+    AND b.remainingAmount > 0
+    """)
+    List<Booking> findDepositOnlyBookingsPassedCheckIn(@Param("yesterday") LocalDate yesterday);
+
 }

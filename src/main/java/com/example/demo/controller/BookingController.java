@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -37,7 +38,7 @@ public class BookingController {
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(@Valid @RequestBody BookingRequest request) {
         log.info("Creating booking for roomTypeId: {}, checkIn: {}, checkOut: {}",
-                request.getRoomTypeId(), request.getCheckInDate(), request.getCheckOutDate());
+                request.getRoomTypeId(), request.getCheckInDate(), request.getCheckOutDate(), request.getDepositPercentage());
 
         BookingResponse booking = bookingService.createBooking(request);
 
@@ -342,6 +343,70 @@ public class BookingController {
         response.setResult(stats);
         response.setCode(HttpStatus.OK.value());
         response.setMessage("Lấy doanh thu thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    // ✅ THÊM VÀO BookingController - 3 endpoints mới cho deposit payment
+
+    /**
+     * Thanh toán cọc
+     */
+    @PostMapping("/{id}/pay-deposit")
+    public ResponseEntity<ApiResponse<BookingResponse>> payDeposit(
+            @PathVariable Long id,
+            @RequestParam BigDecimal depositPercentage) {
+
+        log.info("Paying deposit for booking: {}, percentage: {}%", id, depositPercentage);
+
+        if (depositPercentage.compareTo(BigDecimal.valueOf(10)) < 0 ||
+                depositPercentage.compareTo(BigDecimal.valueOf(50)) > 0) {
+            ApiResponse<BookingResponse> response = new ApiResponse<>();
+            response.setCode(HttpStatus.BAD_REQUEST.value());
+            response.setMessage("Tỷ lệ cọc phải từ 10% đến 50%");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        BookingResponse booking = bookingService.payDeposit(id, depositPercentage);
+
+        ApiResponse<BookingResponse> response = new ApiResponse<>();
+        response.setResult(booking);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Thanh toán cọc thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Thanh toán phần còn lại
+     */
+    @PostMapping("/{id}/pay-remaining")
+    public ResponseEntity<ApiResponse<BookingResponse>> payRemaining(@PathVariable Long id) {
+        log.info("Paying remaining amount for booking: {}", id);
+
+        BookingResponse booking = bookingService.payRemaining(id);
+
+        ApiResponse<BookingResponse> response = new ApiResponse<>();
+        response.setResult(booking);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Thanh toán phần còn lại thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Thanh toán đầy đủ
+     */
+    @PostMapping("/{id}/pay-full")
+    public ResponseEntity<ApiResponse<BookingResponse>> payFullAmount(@PathVariable Long id) {
+        log.info("Paying full amount for booking: {}", id);
+
+        BookingResponse booking = bookingService.payFullAmount(id);
+
+        ApiResponse<BookingResponse> response = new ApiResponse<>();
+        response.setResult(booking);
+        response.setCode(HttpStatus.OK.value());
+        response.setMessage("Thanh toán đầy đủ thành công");
 
         return ResponseEntity.ok(response);
     }

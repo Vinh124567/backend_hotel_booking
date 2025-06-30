@@ -245,13 +245,18 @@ public class BookingValidationService {
             throw new RuntimeException(getCancellationErrorMessage(status));
         }
 
-        // TEMPORARY bookings can always be cancelled
-        if (BookingStatus.TEMPORARY.equals(status)) {
+        // ✅ Can always cancel unpaid bookings
+        if (BookingStatus.TEMPORARY.equals(status) ||
+                BookingStatus.PENDING.equals(status)) {
             return;
         }
 
-        // Check cancellation deadline for confirmed bookings
-        validateCancellationDeadline(booking.getCheckInDate());
+        // ✅ Check time limit for paid bookings
+        if (BookingStatus.PAID.equals(status) ||           // ✅ THÊM
+                BookingStatus.CONFIRMED.equals(status) ||
+                BookingStatus.DEPOSIT_PAID.equals(status)) {
+            validateCancellationDeadline(booking.getCheckInDate());
+        }
     }
 
     /**
@@ -303,7 +308,7 @@ public class BookingValidationService {
     private boolean canCheckIn(String status) {
         return BookingStatus.TEMPORARY.equals(status) ||
                 BookingStatus.PENDING.equals(status) ||
-                BookingStatus.CONFIRMED.equals(status);
+                BookingStatus.CONFIRMED.equals(status) || BookingStatus.PAID.equals(status);
     }
 
     /**

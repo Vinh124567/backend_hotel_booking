@@ -1,9 +1,13 @@
+// ✅ BookingRequest.java - FIXED
 package com.example.demo.dto.booking;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
 import jakarta.validation.constraints.*;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 
 @Data
@@ -13,7 +17,6 @@ public class BookingRequest {
     @Positive(message = "RoomType ID phải là số dương")
     private Long roomTypeId;
 
-    // ✅ THÊM: Optional roomId cho feature chọn phòng cụ thể
     private Long roomId;
 
     @NotNull(message = "Ngày check-in không được để trống")
@@ -38,11 +41,44 @@ public class BookingRequest {
     @Size(max = 500, message = "Yêu cầu đặc biệt không được vượt quá 500 ký tự")
     private String specialRequests;
 
-    // Custom validation method
+    // ✅ NEW FIELDS FOR DEPOSIT PAYMENT
+    @DecimalMin(value = "10.0", message = "Tỷ lệ cọc tối thiểu 10%")
+    @DecimalMax(value = "50.0", message = "Tỷ lệ cọc tối đa 50%")
+    private Double depositPercentage;
+
+    private Boolean isDepositPayment = false;
+
+    // ✅ NEW HELPER METHODS - FIXED
+    public boolean hasSpecificRoomSelected() {
+        return roomId != null;
+    }
+
+    public boolean wantsDepositPayment() {
+        return Boolean.TRUE.equals(isDepositPayment) && depositPercentage != null && depositPercentage > 0;
+    }
+
+    public BigDecimal getDepositAmount() {
+        if (wantsDepositPayment() && totalPrice != null) {
+            BigDecimal total = BigDecimal.valueOf(totalPrice);
+            BigDecimal percentage = BigDecimal.valueOf(depositPercentage / 100.0);
+            return total.multiply(percentage).setScale(2, RoundingMode.HALF_UP);
+        }
+        return totalPrice != null ? BigDecimal.valueOf(totalPrice) : BigDecimal.ZERO;
+    }
+
+    public BigDecimal getRemainingAmount() {
+        if (wantsDepositPayment() && totalPrice != null) {
+            BigDecimal total = BigDecimal.valueOf(totalPrice);
+            return total.subtract(getDepositAmount()).setScale(2, RoundingMode.HALF_UP);
+        }
+        return BigDecimal.ZERO;
+    }
+
+    // ✅ EXISTING VALIDATION METHODS
     @AssertTrue(message = "Ngày check-out phải sau ngày check-in")
     public boolean isCheckOutAfterCheckIn() {
         if (checkInDate == null || checkOutDate == null) {
-            return true; // Let @NotNull handle null validation
+            return true;
         }
         return checkOutDate.isAfter(checkInDate);
     }
@@ -56,8 +92,12 @@ public class BookingRequest {
         return days >= 1 && days <= 30;
     }
 
-    // ✅ THÊM: Helper method
-    public boolean hasSpecificRoomSelected() {
-        return roomId != null;
+    // ✅ NEW VALIDATION
+    @AssertTrue(message = "Nếu chọn đặt cọc, phải có tỷ lệ cọc hợp lệ (10-50%)")
+    public boolean isValidDepositSettings() {
+        if (Boolean.TRUE.equals(isDepositPayment)) {
+            return depositPercentage != null && depositPercentage >= 10.0 && depositPercentage <= 50.0;
+        }
+        return true; // OK if not deposit payment
     }
 }

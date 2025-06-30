@@ -8,6 +8,7 @@ import com.example.demo.repository.ReviewRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -26,11 +27,15 @@ public class BookingMappingService {
         mapRoomTypeInfo(response, booking.getRoomType());
         mapHotelInfo(response, booking.getRoomType().getHotel());
         mapPaymentInfo(response, booking.getPayments());
+
+        // ✅ THÊM: Map deposit fields BEFORE permissions
+        mapDepositInfo(response, booking);
+
         mapPermissions(response, booking);
         mapReviewInfo(response, booking);
+
         return response;
     }
-
     public List<BookingResponse> mapToBookingResponseList(List<Booking> bookings) {
         return bookings.stream()
                 .map(this::mapToBookingResponse)
@@ -52,6 +57,39 @@ public class BookingMappingService {
             response.setRoomNumber(booking.getAssignedRoom().getRoomNumber());
         }
     }
+    private void mapDepositInfo(BookingResponse response, Booking booking) {
+        // Map from booking entity
+        response.setDepositAmount(booking.getDepositAmount() != null ?
+                booking.getDepositAmount().doubleValue() : null);
+        response.setRemainingAmount(booking.getRemainingAmount() != null ?
+                booking.getRemainingAmount().doubleValue() : null);
+
+        // Find deposit payment to get more details
+        if (booking.getPayments() != null && !booking.getPayments().isEmpty()) {
+            Payment depositPayment = booking.getPayments().stream()
+                    .filter(p -> Payment.PaymentType.COC_TRUOC.equals(p.getPaymentType()))
+                    .filter(Payment::isPaid)
+                    .findFirst()
+                    .orElse(null);
+
+            if (depositPayment != null) {
+                response.setPaymentType(depositPayment.getPaymentType());
+                response.setDepositPercentage(depositPayment.getDepositPercentage() != null ?
+                        depositPayment.getDepositPercentage().doubleValue() : null);
+            }
+
+            // Check for any paid payment
+            Payment anyPaidPayment = booking.getPayments().stream()
+                    .filter(Payment::isPaid)
+                    .findFirst()
+                    .orElse(null);
+
+            if (anyPaidPayment != null) {
+                response.setPaymentType(anyPaidPayment.getPaymentType());
+            }
+        }
+    }
+
 
     private void mapUserInfo(BookingResponse response, User user) {
         response.setUserId(user.getId());
@@ -155,13 +193,22 @@ public class BookingMappingService {
 
     private void mapPaymentInfo(BookingResponse response, Set<Payment> payments) {
         if (payments != null && !payments.isEmpty()) {
-            Payment payment = payments.iterator().next();
-            response.setPaymentId(payment.getId());
-            response.setPaymentStatus(payment.getPaymentStatus());
-            response.setPaymentMethod(payment.getPaymentMethod());
-            response.setPaymentDate(payment.getPaymentDate());
-            response.setIsPaid(payment.isPaid());
-            response.setQrCode(payment.getQrCode());
+            // Get latest payment
+            Payment latestPayment = payments.stream()
+                    .max((p1, p2) -> p1.getCreatedAt().compareTo(p2.getCreatedAt()))
+                    .orElse(null);
+
+            if (latestPayment != null) {
+                response.setPaymentId(latestPayment.getId());
+                response.setPaymentStatus(latestPayment.getPaymentStatus());
+                response.setPaymentMethod(latestPayment.getPaymentMethod());
+                response.setPaymentDate(latestPayment.getPaymentDate());
+                response.setIsPaid(latestPayment.isPaid());
+                response.setQrCode(latestPayment.getQrCode());
+
+                // ✅ ADD: Set payment type from latest payment
+                response.setPaymentType(latestPayment.getPaymentType());
+            }
         } else {
             response.setPaymentStatus("Chưa thanh toán");
             response.setIsPaid(false);
@@ -173,33 +220,72 @@ public class BookingMappingService {
         response.setCanModify(calculateCanModify(booking));
         response.setCanCheckIn(calculateCanCheckIn(booking));
         response.setCanCheckOut(calculateCanCheckOut(booking));
+
+        // ✅ ADD: Calculate deposit-specific permissions
+        response.setCanPayRemaining(calculateCanPayRemaining(booking));
+        response.setIsFullyPaid(calculateIsFullyPaid(booking));
+        response.setIsDepositPayment(calculateIsDepositPayment(booking));
     }
 
+    private Boolean calculateCanPayRemaining(Booking booking) {
+        return BookingStatus.PAID.equals(booking.getStatus()) &&
+                booking.getRemainingAmount() != null &&
+                booking.getRemainingAmount().compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    private Boolean calculateIsFullyPaid(Booking booking) {
+        return booking.getRemainingAmount() == null ||
+                booking.getRemainingAmount().compareTo(BigDecimal.ZERO) <= 0 ||
+                BookingStatus.CONFIRMED.equals(booking.getStatus()) ||
+                BookingStatus.CHECKED_IN.equals(booking.getStatus()) ||
+                BookingStatus.COMPLETED.equals(booking.getStatus());
+    }
+
+    private Boolean calculateIsDepositPayment(Booking booking) {
+        // Check if has deposit amount and remaining amount
+        boolean hasDeposit = booking.getDepositAmount() != null &&
+                booking.getDepositAmount().compareTo(BigDecimal.ZERO) > 0;
+        boolean hasRemaining = booking.getRemainingAmount() != null &&
+                booking.getRemainingAmount().compareTo(BigDecimal.ZERO) > 0;
+
+        return hasDeposit && hasRemaining && BookingStatus.PAID.equals(booking.getStatus());
+    }
     private Boolean calculateCanCancel(Booking booking) {
         String status = booking.getStatus();
 
-        if (BookingStatus.CANCELLED.equals(status) || BookingStatus.COMPLETED.equals(status) || BookingStatus.CHECKED_IN.equals(status)) {
+        // ✅ Cannot cancel these statuses
+        if (BookingStatus.CANCELLED.equals(status) ||
+                BookingStatus.COMPLETED.equals(status) ||
+                BookingStatus.CHECKED_IN.equals(status)) {
             return false;
         }
 
-        Set<Payment> payments = booking.getPayments();
-        if (payments != null && !payments.isEmpty()) {
-            Payment payment = payments.iterator().next();
-            if (payment.isPaid()) {
-                return false;
-            }
+        // ✅ Can always cancel unpaid bookings
+        if (BookingStatus.TEMPORARY.equals(status) ||
+                BookingStatus.PENDING.equals(status)) {
+            return true;
         }
 
-        LocalDate checkInDate = booking.getCheckInDate();
-        LocalDate now = LocalDate.now();
-        long daysUntilCheckIn = ChronoUnit.DAYS.between(now, checkInDate);
+        // ✅ For PAID and CONFIRMED status, check time limit
+        if (BookingStatus.PAID.equals(status) ||           // ✅ THÊM
+                BookingStatus.CONFIRMED.equals(status) ||
+                BookingStatus.DEPOSIT_PAID.equals(status)) {
 
-        return daysUntilCheckIn >= 1;
+            LocalDate checkInDate = booking.getCheckInDate();
+            LocalDate now = LocalDate.now();
+            long daysUntilCheckIn = ChronoUnit.DAYS.between(now, checkInDate);
+
+            return daysUntilCheckIn >= 1; // Allow cancel if >= 24 hours before check-in
+        }
+
+        return false;
     }
 
     private Boolean calculateCanModify(Booking booking) {
         String status = booking.getStatus();
-        if (BookingStatus.CANCELLED.equals(status) || BookingStatus.COMPLETED.equals(status) || BookingStatus.CHECKED_IN.equals(status)) {
+        if (BookingStatus.CANCELLED.equals(status) ||
+                BookingStatus.COMPLETED.equals(status) ||
+                BookingStatus.CHECKED_IN.equals(status)) {
             return false;
         }
 
@@ -213,7 +299,10 @@ public class BookingMappingService {
     private Boolean calculateCanCheckIn(Booking booking) {
         String status = booking.getStatus();
 
-        if (!BookingStatus.TEMPORARY.equals(status) && !BookingStatus.PENDING.equals(status) && !BookingStatus.CONFIRMED.equals(status)) {
+        if (!BookingStatus.TEMPORARY.equals(status) &&
+                !BookingStatus.PENDING.equals(status) &&
+                !BookingStatus.CONFIRMED.equals(status) &&
+                !BookingStatus.PAID.equals(status)) { // ✅ ADD: Allow check-in for paid status
             return false;
         }
 
@@ -222,6 +311,7 @@ public class BookingMappingService {
 
         return now.equals(checkInDate) || now.isAfter(checkInDate);
     }
+
 
     private Boolean calculateCanCheckOut(Booking booking) {
         String status = booking.getStatus();

@@ -19,6 +19,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -41,8 +42,8 @@ public class PaymentServiceImpl implements PaymentService {
         Booking booking = bookingRepository.findById(request.getBookingId())
                 .orElseThrow(() -> new RuntimeException("Booking không tồn tại với id: " + request.getBookingId()));
 
-        Payment payment = createPaymentEntity(booking, request);
-        payment = paymentRepository.save(payment);
+        // ✅ THÊM: Smart payment detection và creation
+        Payment payment = createSmartPayment(booking, request);
 
         try {
             MoMoPaymentResponse momoResponse = moMoPaymentService.createPaymentRequest(payment);
@@ -55,7 +56,109 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         paymentHistoryRepository.save(PaymentHistory.createRecord(payment, "Khởi tạo thanh toán MoMo"));
+
+        // ✅ THÊM: Update booking status sau khi tạo payment
+        updateBookingAfterPaymentCreation(booking, payment);
+
         return modelMapper.map(payment, PaymentResponse.class);
+    }
+
+    private Payment createSmartPayment(Booking booking, PaymentRequest request) {
+        String status = booking.getStatus();
+
+        log.info("🎯 Smart payment detection for booking {}: status={}, depositAmount={}, remainingAmount={}",
+                booking.getId(), status, booking.getDepositAmount(), booking.getRemainingAmount());
+
+        // Case 1: Booking đã đặt cọc, cần thanh toán phần còn lại
+        if ("Đã thanh toán".equals(status) &&
+                booking.getRemainingAmount() != null &&
+                booking.getRemainingAmount().compareTo(BigDecimal.ZERO) > 0) {
+
+            log.info("💰 Creating REMAINING payment: {} VND", booking.getRemainingAmount());
+            return createRemainingPaymentInternal(booking, booking.getRemainingAmount(), request);
+        }
+
+        // Case 2: Booking mới có thông tin deposit (từ frontend request)
+        if (("Tạm giữ chỗ".equals(status) || "Chờ xác nhận".equals(status)) &&
+                booking.getDepositAmount() != null &&
+                booking.getDepositAmount().compareTo(BigDecimal.ZERO) > 0) {
+
+            log.info("🏦 Creating DEPOSIT payment: {} VND ({}%)",
+                    booking.getDepositAmount(), booking.getDepositPercentage());
+            return createDepositPaymentInternal(booking, booking.getDepositAmount(),
+                    booking.getDepositPercentage(), request);
+        }
+
+        // Case 3: Default full payment
+        log.info("💳 Creating FULL payment: {} VND", booking.getTotalPrice());
+        return createFullPaymentInternal(booking, booking.getTotalPrice(), request);
+    }
+
+    private Payment createDepositPaymentInternal(Booking booking, BigDecimal amount,
+                                                 BigDecimal depositPercentage, PaymentRequest request) {
+        return Payment.builder()
+                .booking(booking)
+                .amount(amount)
+                .paymentType(Payment.PaymentType.COC_TRUOC)
+                .depositPercentage(depositPercentage)
+                .paymentMethod(request.getPaymentMethod())
+                .paymentStatus("Chờ thanh toán")
+                .gateway(request.getGateway())
+                .orderId("DEP_" + booking.getId() + "_" + System.currentTimeMillis())
+                .transactionId(moMoPaymentService.generateTransactionId())
+                .requestId(moMoPaymentService.generateRequestId())
+                .partnerCode(paymentConfig.getMomoPartnerCode())
+                .notes("Thanh toán cọc " + depositPercentage + "% - " + (request.getNotes() != null ? request.getNotes() : ""))
+                .qrExpiryTime(LocalDateTime.now().plusMinutes(15))
+                .callbackUrl(paymentConfig.getMomoCallbackUrl())
+                .redirectUrl(paymentConfig.getMomoRedirectUrl())
+                .build();
+    }
+
+    private Payment createRemainingPaymentInternal(Booking booking, BigDecimal amount, PaymentRequest request) {
+        return Payment.builder()
+                .booking(booking)
+                .amount(amount)
+                .paymentType(Payment.PaymentType.THANH_TOAN_CON_LAI)
+                .paymentMethod(request.getPaymentMethod())
+                .paymentStatus("Chờ thanh toán")
+                .gateway(request.getGateway())
+                .orderId("REM_" + booking.getId() + "_" + System.currentTimeMillis())
+                .transactionId(moMoPaymentService.generateTransactionId())
+                .requestId(moMoPaymentService.generateRequestId())
+                .partnerCode(paymentConfig.getMomoPartnerCode())
+                .notes("Thanh toán phần còn lại - " + (request.getNotes() != null ? request.getNotes() : ""))
+                .qrExpiryTime(LocalDateTime.now().plusMinutes(15))
+                .callbackUrl(paymentConfig.getMomoCallbackUrl())
+                .redirectUrl(paymentConfig.getMomoRedirectUrl())
+                .build();
+    }
+
+
+    private Payment createFullPaymentInternal(Booking booking, BigDecimal amount, PaymentRequest request) {
+        return Payment.builder()
+                .booking(booking)
+                .amount(amount)
+                .paymentType(Payment.PaymentType.THANH_TOAN_DAY_DU)
+                .paymentMethod(request.getPaymentMethod())
+                .paymentStatus("Chờ thanh toán")
+                .gateway(request.getGateway())
+                .orderId("FULL_" + booking.getId() + "_" + System.currentTimeMillis())
+                .transactionId(moMoPaymentService.generateTransactionId())
+                .requestId(moMoPaymentService.generateRequestId())
+                .partnerCode(paymentConfig.getMomoPartnerCode())
+                .notes("Thanh toán đầy đủ - " + (request.getNotes() != null ? request.getNotes() : ""))
+                .qrExpiryTime(LocalDateTime.now().plusMinutes(15))
+                .callbackUrl(paymentConfig.getMomoCallbackUrl())
+                .redirectUrl(paymentConfig.getMomoRedirectUrl())
+                .build();
+    }
+
+    private void updateBookingAfterPaymentCreation(Booking booking, Payment payment) {
+        // Không cần update status ở đây, chỉ update khi payment thành công thực sự
+        // PaymentEventListener sẽ handle việc này
+        log.info("Payment created successfully for booking {}: paymentId={}, type={}",
+                booking.getId(), payment.getId(), payment.getPaymentType());
     }
 
     @Override
@@ -246,5 +349,143 @@ public class PaymentServiceImpl implements PaymentService {
                             "ERROR: Payment successful but event publication failed: " + e.getMessage())
             );
         }
+    }
+
+    // ✅ Thêm vào PaymentServiceImpl.java - CHỈ THÊM CÁC METHODS MỚI
+
+// ========== 🆕 NEW DEPOSIT PAYMENT METHODS ==========
+
+    @Transactional
+    @Override
+    public Payment createDepositPayment(Long bookingId, BigDecimal amount, BigDecimal depositPercentage) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new RuntimeException("Booking không tồn tại"));
+
+        Payment payment = Payment.builder()
+                .booking(booking)
+                .amount(amount)
+                .paymentType(Payment.PaymentType.COC_TRUOC)
+                .depositPercentage(depositPercentage)
+                .paymentMethod("Ví điện tử")
+                .paymentStatus("Đã thanh toán") // Simulate instant success for demo
+                .paymentDate(LocalDateTime.now())
+                .gateway("momo")
+                .orderId("DEP_" + bookingId + "_" + System.currentTimeMillis())
+                .transactionId(moMoPaymentService.generateTransactionId())
+                .requestId(moMoPaymentService.generateRequestId())
+                .partnerCode(paymentConfig.getMomoPartnerCode())
+                .notes("Thanh toán cọc " + depositPercentage + "%")
+                .build();
+
+        payment = paymentRepository.save(payment);
+
+        // Create payment history
+        paymentHistoryRepository.save(
+                PaymentHistory.createRecord(payment, "Thanh toán cọc thành công")
+        );
+
+        log.info("Created deposit payment: {} VND ({}%) for booking {}",
+                amount, depositPercentage, bookingId);
+
+        return payment;
+    }
+
+    @Transactional
+    @Override
+    public Payment createRemainingPayment(Long bookingId, BigDecimal amount) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new RuntimeException("Booking không tồn tại"));
+
+        Payment payment = Payment.builder()
+                .booking(booking)
+                .amount(amount)
+                .paymentType(Payment.PaymentType.THANH_TOAN_CON_LAI)
+                .paymentMethod("Ví điện tử")
+                .paymentStatus("Đã thanh toán") // Simulate instant success for demo
+                .paymentDate(LocalDateTime.now())
+                .gateway("momo")
+                .orderId("REM_" + bookingId + "_" + System.currentTimeMillis())
+                .transactionId(moMoPaymentService.generateTransactionId())
+                .requestId(moMoPaymentService.generateRequestId())
+                .partnerCode(paymentConfig.getMomoPartnerCode())
+                .notes("Thanh toán phần còn lại")
+                .build();
+
+        payment = paymentRepository.save(payment);
+
+        paymentHistoryRepository.save(
+                PaymentHistory.createRecord(payment, "Thanh toán phần còn lại thành công")
+        );
+
+        log.info("Created remaining payment: {} VND for booking {}", amount, bookingId);
+
+        return payment;
+    }
+
+    @Transactional
+    @Override
+    public Payment createFullPayment(Long bookingId, BigDecimal amount) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new RuntimeException("Booking không tồn tại"));
+
+        Payment payment = Payment.builder()
+                .booking(booking)
+                .amount(amount)
+                .paymentType(Payment.PaymentType.THANH_TOAN_DAY_DU)
+                .paymentMethod("Ví điện tử")
+                .paymentStatus("Đã thanh toán") // Simulate instant success for demo
+                .paymentDate(LocalDateTime.now())
+                .gateway("momo")
+                .orderId("FULL_" + bookingId + "_" + System.currentTimeMillis())
+                .transactionId(moMoPaymentService.generateTransactionId())
+                .requestId(moMoPaymentService.generateRequestId())
+                .partnerCode(paymentConfig.getMomoPartnerCode())
+                .notes("Thanh toán đầy đủ")
+                .build();
+
+        payment = paymentRepository.save(payment);
+
+        paymentHistoryRepository.save(
+                PaymentHistory.createRecord(payment, "Thanh toán đầy đủ thành công")
+        );
+
+        // Publish payment success event
+        publishPaymentSuccessEvent(payment);
+
+        log.info("Created full payment: {} VND for booking {}", amount, bookingId);
+
+        return payment;
+    }
+
+    @Transactional
+    @Override
+    public Payment createRefundPayment(Long bookingId, BigDecimal amount, String reason) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new RuntimeException("Booking không tồn tại"));
+
+        Payment payment = Payment.builder()
+                .booking(booking)
+                .amount(amount.negate()) // Negative for refund
+                .paymentType(Payment.PaymentType.HOAN_TIEN)
+                .paymentMethod("Ví điện tử")
+                .paymentStatus("Đã hoàn tiền")
+                .paymentDate(LocalDateTime.now())
+                .gateway("momo")
+                .orderId("REFUND_" + bookingId + "_" + System.currentTimeMillis())
+                .transactionId(moMoPaymentService.generateTransactionId())
+                .requestId(moMoPaymentService.generateRequestId())
+                .partnerCode(paymentConfig.getMomoPartnerCode())
+                .notes("Hoàn tiền: " + reason)
+                .build();
+
+        payment = paymentRepository.save(payment);
+
+        paymentHistoryRepository.save(
+                PaymentHistory.createRecord(payment, "Hoàn tiền thành công: " + reason)
+        );
+
+        log.info("Created refund payment: {} VND for booking {} - {}", amount, bookingId, reason);
+
+        return payment;
     }
 }

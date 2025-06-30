@@ -25,6 +25,7 @@ public class SecurityConfig {
 
     // Endpoint công khai - không cần xác thực
     private final String[] PUBLIC_ENDPOINTS = {
+            "/api/v1/admin/**",
             "/api/v1/auth/**",
             "/api/v1/coffee/public/**",
             "/api/v1/categories/public/**",
