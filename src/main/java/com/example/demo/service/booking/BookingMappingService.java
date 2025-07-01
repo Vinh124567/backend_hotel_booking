@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class BookingMappingService {
+    private static final int CHECK_IN_GRACE_DAYS = 1;
     private final ReviewRepository reviewRepository;
     public BookingResponse mapToBookingResponse(Booking booking) {
         BookingResponse response = new BookingResponse();
@@ -296,23 +298,41 @@ public class BookingMappingService {
         return daysUntilCheckIn >= 2;
     }
 
+    // ✅ SỬA BookingMappingService
+// ✅ SỬA BookingMappingService
     private Boolean calculateCanCheckIn(Booking booking) {
         String status = booking.getStatus();
 
-        if (!BookingStatus.TEMPORARY.equals(status) &&
-                !BookingStatus.PENDING.equals(status) &&
-                !BookingStatus.CONFIRMED.equals(status) &&
-                !BookingStatus.PAID.equals(status)) { // ✅ ADD: Allow check-in for paid status
+        if (!BookingStatus.CONFIRMED.equals(status) && !BookingStatus.PAID.equals(status)) {
             return false;
         }
 
         LocalDate checkInDate = booking.getCheckInDate();
-        LocalDate now = LocalDate.now();
+        LocalDate today = LocalDate.now();
 
-        return now.equals(checkInDate) || now.isAfter(checkInDate);
+        // ✅ FULL PAYMENT: Không giới hạn thời gian
+        if (BookingStatus.CONFIRMED.equals(status)) {
+            // Đã thanh toán full → Luôn có thể check-in
+            return true; // Unlimited grace period
+        }
+
+        // ✅ DEPOSIT PAYMENT: Có giới hạn thời gian
+        if (BookingStatus.PAID.equals(status)) {
+            // Current or future dates
+            if (checkInDate.equals(today) || checkInDate.isAfter(today)) {
+                return true;
+            }
+
+            // Past dates - Limited grace period cho deposit
+            if (checkInDate.isBefore(today)) {
+                long daysPassed = ChronoUnit.DAYS.between(checkInDate, today);
+                return daysPassed <= CHECK_IN_GRACE_DAYS; // 1 ngày
+            }
+        }
+
+        return false;
     }
-
-
+c
     private Boolean calculateCanCheckOut(Booking booking) {
         String status = booking.getStatus();
 

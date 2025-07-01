@@ -3,28 +3,32 @@ package com.example.demo.service.booking;
 import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingStatus;
 import com.example.demo.entity.Booking;
+import com.example.demo.entity.Hotel;
+import com.example.demo.entity.Room;
 import com.example.demo.entity.User;
 import com.example.demo.repository.BookingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class BookingValidationService {
     private final BookingRepository bookingRepository;
 
-    // ✅ BUSINESS RULES CONSTANTS
+
     private static final int SAME_DAY_CUTOFF_HOUR = 18; // 6PM
     private static final int CANCELLATION_HOURS_BEFORE = 24;
     private static final int MODIFICATION_HOURS_BEFORE = 48;
     private static final int MAX_ACTIVE_BOOKINGS_PER_USER = 5;
     private static final int MAX_ADVANCE_BOOKING_DAYS = 365;
-    private static final int CHECK_IN_GRACE_DAYS = 1;
+    private static final int CHECK_IN_GRACE_DAYS = 1; // ✅ THÊM: Grace period
     private static final int CHECK_OUT_GRACE_DAYS = 1;
 
     // =========================================================================
@@ -292,6 +296,7 @@ public class BookingValidationService {
     /**
      * Validate check-in business rules
      */
+    // ✅ SỬA: Thêm room validation vào validateCheckIn
     public void validateCheckIn(Booking booking) {
         String status = booking.getStatus();
 
@@ -299,7 +304,19 @@ public class BookingValidationService {
             throw new RuntimeException("Chỉ có thể check-in đặt phòng ở trạng thái hợp lệ. Trạng thái hiện tại: " + status);
         }
 
-        validateCheckInTiming(booking.getCheckInDate());
+        // ✅ SỬA: Dùng method mới thay vì cũ
+        validateCheckInTimingWithPaymentType(booking); // Thay vì validateCheckInTiming(booking.getCheckInDate())
+
+        // ✅ THÊM: Validate room nếu có
+        if (booking.getAssignedRoom() != null) {
+            validateRoomForCheckIn(booking.getAssignedRoom(), booking);
+            validateNoRoomConflict(
+                    booking.getAssignedRoom().getId(),
+                    booking.getCheckInDate(),
+                    booking.getCheckOutDate(),
+                    booking.getId()
+            );
+        }
     }
 
     /**
@@ -308,22 +325,60 @@ public class BookingValidationService {
     private boolean canCheckIn(String status) {
         return BookingStatus.TEMPORARY.equals(status) ||
                 BookingStatus.PENDING.equals(status) ||
-                BookingStatus.CONFIRMED.equals(status) || BookingStatus.PAID.equals(status);
+                BookingStatus.CONFIRMED.equals(status) ||
+                BookingStatus.PAID.equals(status);
     }
 
     /**
      * Validate check-in timing
      */
+    // ✅ SỬA BookingValidationService
+    // ✅ SỬA BookingValidationService
     private void validateCheckInTiming(LocalDate checkInDate) {
-        LocalDate now = LocalDate.now();
+        LocalDate today = LocalDate.now();
 
-        if (now.isBefore(checkInDate)) {
-            throw new RuntimeException("Chưa đến ngày check-in");
+        if (checkInDate.equals(today) || checkInDate.isAfter(today)) {
+            return;
         }
 
-        if (ChronoUnit.DAYS.between(checkInDate, now) > CHECK_IN_GRACE_DAYS) {
+        if (checkInDate.isBefore(today)) {
+            long daysPassed = ChronoUnit.DAYS.between(checkInDate, today);
+            if (daysPassed <= CHECK_IN_GRACE_DAYS) {
+                return;
+            }
+
             throw new RuntimeException("Đã quá thời gian check-in (quá " + CHECK_IN_GRACE_DAYS + " ngày)");
         }
+    }
+
+    private void validateCheckInTimingWithPaymentType(Booking booking) {
+        LocalDate checkInDate = booking.getCheckInDate();
+        LocalDate today = LocalDate.now();
+
+        // ✅ FULL PAYMENT: Không giới hạn thời gian
+        if (BookingStatus.CONFIRMED.equals(booking.getStatus())) {
+            return; // Full payment → No time restriction
+        }
+
+        // ✅ DEPOSIT PAYMENT: Validate theo thời gian
+        if (BookingStatus.PAID.equals(booking.getStatus())) {
+            if (checkInDate.equals(today) || checkInDate.isAfter(today)) {
+                return;
+            }
+
+            if (checkInDate.isBefore(today)) {
+                long daysPassed = ChronoUnit.DAYS.between(checkInDate, today);
+                if (daysPassed <= CHECK_IN_GRACE_DAYS) {
+                    return;
+                }
+
+                throw new RuntimeException("Booking cọc đã quá thời hạn check-in (" +
+                        CHECK_IN_GRACE_DAYS + " ngày). Vui lòng thanh toán phần còn lại hoặc liên hệ khách sạn.");
+            }
+        }
+
+        // ✅ FALLBACK: Dùng logic cũ cho các status khác
+        validateCheckInTiming(checkInDate);
     }
 
     /**
@@ -537,5 +592,50 @@ public class BookingValidationService {
         summary.append("Check-in Date: ").append(booking.getCheckInDate()).append("\n");
         summary.append("Check-out Date: ").append(booking.getCheckOutDate()).append("\n");
         return summary.toString();
+    }
+
+    /**
+     * ✅ THÊM: Validate room có thể check-in
+     */
+    public void validateRoomForCheckIn(Room room, Booking booking) {
+        if (room == null) {
+            throw new RuntimeException("Booking chưa được assign phòng");
+        }
+
+        // Check room status
+        if (!"Trống".equals(room.getStatus()) && !"Sẵn sàng".equals(room.getStatus())) {
+            throw new RuntimeException("Phòng " + room.getRoomNumber() +
+                    " không ở trạng thái sẵn sàng cho check-in. Trạng thái hiện tại: " + room.getStatus());
+        }
+
+        // Check room type matches
+        if (!room.getRoomType().getId().equals(booking.getRoomType().getId())) {
+            throw new RuntimeException("Phòng được assign không đúng loại phòng đã đặt");
+        }
+    }
+
+    /**
+     * ✅ THÊM: Validate không có conflict với booking khác
+     */
+    public void validateNoRoomConflict(Long roomId, LocalDate checkIn, LocalDate checkOut, Long excludeBookingId) {
+        boolean hasConflict = bookingRepository.hasActiveBookingForRoom(roomId, checkIn, checkOut, excludeBookingId);
+
+        if (hasConflict) {
+            throw new RuntimeException("Phòng đã có booking khác trong khoảng thời gian này");
+        }
+
+        boolean hasCheckedIn = bookingRepository.hasCheckedInBookingForRoom(roomId, excludeBookingId);
+
+        if (hasCheckedIn) {
+            // Get info về booking đang check-in
+            Optional<Booking> currentBooking = bookingRepository.getCurrentCheckedInBookingForRoom(roomId);
+            if (currentBooking.isPresent()) {
+                Booking existing = currentBooking.get();
+                throw new RuntimeException("Phòng đang có khách: " + existing.getUser().getFullName() +
+                        " (Check-out: " + existing.getCheckOutDate() + ")");
+            } else {
+                throw new RuntimeException("Phòng đang có khách ở, không thể check-in");
+            }
+        }
     }
 }

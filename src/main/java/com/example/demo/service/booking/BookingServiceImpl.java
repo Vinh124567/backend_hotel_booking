@@ -1,5 +1,4 @@
 package com.example.demo.service.booking;
-
 import com.example.demo.dto.booking.BookingRequest;
 import com.example.demo.dto.booking.BookingResponse;
 import com.example.demo.dto.booking.BookingStatsResponse;
@@ -13,14 +12,15 @@ import com.example.demo.repository.RoomTypeRepository;
 import com.example.demo.service.notification.AdminNotificationService;
 import com.example.demo.service.payment.PaymentService;
 import com.example.demo.service.user.UserService;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -59,6 +59,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Transactional
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Override
     public BookingResponse createBooking(BookingRequest request) {
         User currentUser = userService.getCurrentUser();
@@ -503,6 +504,7 @@ public class BookingServiceImpl implements BookingService {
 
         validationService.validateCheckIn(booking);
 
+        // ✅ THÊM: Validate room assignment
         if (booking.getAssignedRoom() == null) {
             Room availableRoom = availabilityService.findAvailableRoom(
                     booking.getRoomType().getId(),
@@ -518,21 +520,65 @@ public class BookingServiceImpl implements BookingService {
             log.info("Auto-assigned room {} for check-in booking {}", availableRoom.getRoomNumber(), bookingId);
         }
 
-        booking.setStatus(BookingStatus.CHECKED_IN);
+        // ✅ THÊM: Validate room không đang được sử dụng
         Room assignedRoom = booking.getAssignedRoom();
-        if (assignedRoom != null) {
-            assignedRoom.setStatus("Đang sử dụng");
-            roomRepository.save(assignedRoom);
-            log.info("Updated room {} status to 'Đang sử dụng' on check-in",
-                    assignedRoom.getRoomNumber());
-        }
+        validateRoomAvailableForCheckIn(assignedRoom, booking);
+
+        booking.setStatus(BookingStatus.CHECKED_IN);
+        assignedRoom.setStatus("Đang sử dụng");
+        roomRepository.save(assignedRoom);
 
         booking = bookingRepository.save(booking);
 
-        // ✅ Notify admin about check-in
+        // Notify admin about check-in
         adminNotificationService.notifyCheckIn(booking);
 
         return mappingService.mapToBookingResponse(booking);
+    }
+
+    // ✅ SỬA validateRoomAvailableForCheckIn
+    private void validateRoomAvailableForCheckIn(Room room, Booking currentBooking) {
+        // Check 1: Room status
+        if (!"Trống".equals(room.getStatus()) && !"Sẵn sàng".equals(room.getStatus())) {
+            // ✅ SPECIAL CASE: Full payment booking flexibility
+            if (BookingStatus.CONFIRMED.equals(currentBooking.getStatus())) {
+                // Có thể negotiate với admin nếu là full payment
+                log.warn("Full payment booking {} attempting check-in to occupied room {}",
+                        currentBooking.getId(), room.getRoomNumber());
+            }
+            throw new RuntimeException("Phòng " + room.getRoomNumber() +
+                    " đang có trạng thái '" + room.getStatus() + "'. " +
+                    (BookingStatus.CONFIRMED.equals(currentBooking.getStatus()) ?
+                            "Vui lòng liên hệ lễ tân để được hỗ trợ." :
+                            "Không thể check-in."));
+        }
+
+        // Check 2: Không có booking khác đang active
+        boolean hasActiveBooking = bookingRepository.hasActiveBookingForRoom(
+                room.getId(),
+                currentBooking.getCheckInDate(),
+                currentBooking.getCheckOutDate(),
+                currentBooking.getId()
+        );
+
+        if (hasActiveBooking) {
+            if (BookingStatus.CONFIRMED.equals(currentBooking.getStatus())) {
+                // Full payment → Admin cần resolve conflict
+                throw new RuntimeException("Phòng " + room.getRoomNumber() +
+                        " đã có booking khác. Vui lòng liên hệ manager để được hỗ trợ chuyển phòng.");
+            } else {
+                throw new RuntimeException("Phòng " + room.getRoomNumber() +
+                        " đã có booking khác đang active, không thể check-in");
+            }
+        }
+
+        // Check 3: Không có booking đang checked-in
+        boolean hasCheckedInBooking = bookingRepository.hasCheckedInBookingForRoom(room.getId(), currentBooking.getId());
+
+        if (hasCheckedInBooking) {
+            throw new RuntimeException("Phòng " + room.getRoomNumber() +
+                    " đang có khách ở, không thể check-in booking mới");
+        }
     }
 
     @Override
@@ -722,22 +768,21 @@ public class BookingServiceImpl implements BookingService {
 
     // ✅ THÊM VÀO BookingServiceImpl.java
 
+    // ✅ SỬA BookingServiceImpl - Chỉ auto-expire DEPOSIT booking
     @Scheduled(fixedRate = 1800000) // 30 phút
     @Transactional
     public void autoExpireDepositBookings() {
         LocalDate yesterday = LocalDate.now().minusDays(1);
 
-        // Tìm booking đã cọc nhưng quá hạn check-in mà chưa thanh toán hết
+        // ✅ CHỈ tìm DEPOSIT booking (PAID status + có remaining amount)
         List<Booking> expiredBookings = bookingRepository
                 .findDepositOnlyBookingsPassedCheckIn(yesterday);
 
         for (Booking booking : expiredBookings) {
             log.info("Auto-expiring deposit booking: {}", booking.getId());
 
-            // Chuyển thành hủy - đơn giản!
             booking.setStatus(BookingStatus.CANCELLED);
 
-            // Release room
             if (booking.getAssignedRoom() != null) {
                 Room room = booking.getAssignedRoom();
                 room.setStatus("Trống");
@@ -750,6 +795,9 @@ public class BookingServiceImpl implements BookingService {
             log.info("Auto-expired {} deposit bookings", expiredBookings.size());
         }
     }
+
+// ✅ XÓA hoặc comment autoExpireFullPaymentBookings() method
+// Không cần auto-expire full payment bookings
 
 
 }

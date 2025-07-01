@@ -503,12 +503,54 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     // ✅ THÊM VÀO BookingRepository.java
 
+    // ✅ KIỂM TRA query trong BookingRepository - Đảm bảo chỉ lấy deposit
     @Query("""
     SELECT b FROM Booking b 
     WHERE b.status = 'Đã thanh toán' 
     AND b.checkInDate < :yesterday
     AND b.remainingAmount > 0
-    """)
+""")
     List<Booking> findDepositOnlyBookingsPassedCheckIn(@Param("yesterday") LocalDate yesterday);
+
+// ✅ QUERY này đã đúng - chỉ lấy booking có remainingAmount > 0 (deposit)
+// Không ảnh hưởng đến full payment booking
+
+    // ✅ THÊM: Check có booking active cho room cụ thể
+    @Query("""
+    SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END
+    FROM Booking b 
+    WHERE b.assignedRoom.id = :roomId 
+    AND b.status IN ('Đã xác nhận', 'Đã thanh toán', 'Đã nhận phòng')
+    AND b.id <> :excludeBookingId
+    AND NOT (b.checkOutDate <= :checkInDate OR b.checkInDate >= :checkOutDate)
+""")
+    boolean hasActiveBookingForRoom(
+            @Param("roomId") Long roomId,
+            @Param("checkInDate") LocalDate checkInDate,
+            @Param("checkOutDate") LocalDate checkOutDate,
+            @Param("excludeBookingId") Long excludeBookingId
+    );
+
+    // ✅ THÊM: Check có booking đang checked-in cho room
+    @Query("""
+    SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END
+    FROM Booking b 
+    WHERE b.assignedRoom.id = :roomId 
+    AND b.status = 'Đã nhận phòng'
+    AND b.id <> :excludeBookingId
+""")
+    boolean hasCheckedInBookingForRoom(
+            @Param("roomId") Long roomId,
+            @Param("excludeBookingId") Long excludeBookingId
+    );
+
+    // ✅ THÊM: Get current checked-in booking cho room
+    @Query("""
+    SELECT b FROM Booking b 
+    WHERE b.assignedRoom.id = :roomId 
+    AND b.status = 'Đã nhận phòng'
+    ORDER BY b.bookingDate DESC
+""")
+    Optional<Booking> getCurrentCheckedInBookingForRoom(@Param("roomId") Long roomId);
 
 }
