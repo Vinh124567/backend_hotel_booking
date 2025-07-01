@@ -33,6 +33,14 @@ public class AmenityServiceImpl implements AmenityService {
         amenityRepository.save(amenity);
     }
 
+    @Override
+    public List<AmenityResponse> getAllAmenities() {
+        List<Amenity> amenities = amenityRepository.findAll();
+        return amenities.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+    }
+
     @PreAuthorize("hasRole('ADMIN')")
     @Override
     public void updateAmenity(Long id, AmenityRequest request) {

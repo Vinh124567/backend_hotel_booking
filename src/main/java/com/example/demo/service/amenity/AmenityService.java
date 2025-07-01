@@ -12,7 +12,7 @@ public interface AmenityService {
     void updateAmenity(Long id, AmenityRequest request);
 
     public void deleteAmenity(Long id);
-
+    List<AmenityResponse> getAllAmenities();
     List<AmenityResponse> getAmenitiesByHotelId(Long hotelId);
 
 }

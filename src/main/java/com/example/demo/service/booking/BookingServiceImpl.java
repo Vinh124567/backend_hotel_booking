@@ -71,7 +71,13 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new RuntimeException("Loại phòng không tồn tại với ID: " + request.getRoomTypeId()));
 
         Room assignedRoom = null;
-
+        if (request.getNumberOfGuests() > roomType.getMaxOccupancy()) {
+            throw new RuntimeException("Số khách (" + request.getNumberOfGuests() +
+                    ") vượt quá sức chứa phòng (" + roomType.getMaxOccupancy() + ")");
+        }
+        if (!roomType.getHotel().getIsActive()) {
+            throw new RuntimeException("Khách sạn hiện đang tạm ngưng hoạt động");
+        }
         if (request.hasSpecificRoomSelected()) {
             assignedRoom = validateAndGetSpecificRoom(request);
             log.info("User selected specific room: {}", assignedRoom.getRoomNumber());
@@ -117,7 +123,12 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đặt phòng với ID: " + bookingId));
 
         validationService.validateBookingForConfirmation(booking);
-
+        if (!availabilityService.isRoomTypeAvailable(
+                booking.getRoomType().getId(),
+                booking.getCheckInDate(),
+                booking.getCheckOutDate())) {
+            throw new RuntimeException("Phòng đã hết trong thời gian booking được tạo, không thể xác nhận");
+        }
         if (!availabilityService.isRoomTypeAvailableForConfirmation(booking)) {
             throw new RuntimeException("Phòng không còn khả dụng");
         }
@@ -690,7 +701,10 @@ public class BookingServiceImpl implements BookingService {
     private Room validateAndGetSpecificRoom(BookingRequest request) {
         Room room = roomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new RuntimeException("Phòng không tồn tại với ID: " + request.getRoomId()));
-
+        if ("Bảo trì".equals(room.getStatus()) || "Hỏng".equals(room.getStatus())) {
+            throw new RuntimeException("Phòng " + room.getRoomNumber() +
+                    " hiện không thể đặt (đang " + room.getStatus().toLowerCase() + ")");
+        }
         if (!room.getRoomType().getId().equals(request.getRoomTypeId())) {
             throw new RuntimeException("Phòng không thuộc loại phòng đã chọn");
         }

@@ -58,4 +58,13 @@ public class AmenityController {
         response.setCode(HttpStatus.OK.value());
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
+
+    @GetMapping("/all")
+    public ResponseEntity<?> getAllAmenities() {
+        List<AmenityResponse> amenities = amenityService.getAllAmenities();
+        ApiResponse<List<AmenityResponse>> response = new ApiResponse<>();
+        response.setResult(amenities);
+        response.setCode(HttpStatus.OK.value());
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
 }

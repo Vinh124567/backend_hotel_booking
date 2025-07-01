@@ -55,7 +55,7 @@ public final class BookingStatus {
     // ✅ NEW HELPER METHODS
     public static boolean requiresAdminNotification(String status) {
         return CONFIRMED.equals(status) ||
-                DEPOSIT_PAID.equals(status) ||
+                DEPOSIT_PAID.equals(status) || PAID.equals(status) ||
                 CHECKED_IN.equals(status);
     }
 

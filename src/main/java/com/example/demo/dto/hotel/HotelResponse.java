@@ -35,4 +35,9 @@ public class HotelResponse {
     private String hotelCategory;
     private Hotel.PropertyType propertyType;
     private List<RoomTypeResponse> roomTypes;
+    private String checkInTime;
+    private String checkOutTime;
+    private Boolean isActive;
+    private Double latitude;
+    private Double longitude;
 }

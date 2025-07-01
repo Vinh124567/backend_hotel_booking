@@ -117,6 +117,15 @@ public class HotelServiceImpl implements HotelService {
                 hotel.setAmenities(amenities);
                 System.out.println("🔍 Updated amenities count: " + amenities.size());
             }
+            if (request.getCheckInTime() != null) {
+                hotel.setCheckInTime(request.getCheckInTime());
+                System.out.println("✅ Set check-in time: " + hotel.getCheckInTime());
+            }
+
+            if (request.getCheckOutTime() != null) {
+                hotel.setCheckOutTime(request.getCheckOutTime());
+                System.out.println("✅ Set check-out time: " + hotel.getCheckOutTime());
+            }
 
             // ✅ Cập nhật hình ảnh - LOGIC CHÍNH XÁC
             if (request.getImages() != null) {
@@ -278,6 +287,12 @@ public class HotelServiceImpl implements HotelService {
         } else {
             response.setAverageRating(0.0);
             response.setReviewCount(0);
+        }
+        if (hotel.getCheckInTime() != null) {
+            response.setCheckInTime(hotel.getCheckInTime().toString()); // "14:00"
+        }
+        if (hotel.getCheckOutTime() != null) {
+            response.setCheckOutTime(hotel.getCheckOutTime().toString()); // "12:00"
         }
 
         return response;

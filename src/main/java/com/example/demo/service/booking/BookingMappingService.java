@@ -332,7 +332,7 @@ public class BookingMappingService {
 
         return false;
     }
-c
+
     private Boolean calculateCanCheckOut(Booking booking) {
         String status = booking.getStatus();
 

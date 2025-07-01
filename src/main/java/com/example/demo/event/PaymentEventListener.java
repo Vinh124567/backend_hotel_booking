@@ -39,26 +39,60 @@ public class PaymentEventListener {
             Booking booking = bookingRepository.findById(bookingId)
                     .orElseThrow(() -> new RuntimeException("Booking không tồn tại với ID: " + bookingId));
 
-            // ✅ THÊM: Get payment để xác định loại
+            if (!BookingStatus.TEMPORARY.equals(booking.getStatus()) && !BookingStatus.PENDING.equals(booking.getStatus())) {
+                log.warn("Booking {} không ở trạng thái hợp lệ để confirm: {}", bookingId, booking.getStatus());
+                return;
+            }
             List<Payment> payments = paymentRepository.findByBookingId(bookingId);
             Payment latestPayment = payments.stream()
                     .filter(Payment::isPaid)
                     .max(Comparator.comparing(Payment::getPaymentDate))
                     .orElse(null);
 
-            if (latestPayment == null) {
-                log.warn("No paid payment found for booking {}", bookingId);
+            long confirmedBookings = bookingRepository.countConfirmedOverlappingBookingsExcluding(
+                    booking.getRoomType().getId(),
+                    booking.getCheckInDate(),
+                    booking.getCheckOutDate(),
+                    booking.getId());
+
+            if (confirmedBookings >= 5) {
+                log.error("Phòng không còn khả dụng cho booking: {}", bookingId);
                 return;
             }
 
-            log.info("🎉 Processing payment success: bookingId={}, paymentType={}, amount={}",
-                    bookingId, latestPayment.getPaymentType(), latestPayment.getAmount());
+            // ✅ Update booking status (sẽ được set đúng ở service layer)
+            booking.setStatus(BookingStatus.CONFIRMED);
 
-            // ✅ THÊM: Handle theo payment type
-            handlePaymentByType(booking, latestPayment);
+            // ✅ THÊM: Auto-assign room nếu chưa có
+            Room assignedRoom = booking.getAssignedRoom();
+            if (assignedRoom == null) {
+                // Tìm phòng trống
+                List<Room> availableRooms = roomRepository.findAvailableRoomsByTypeAndDates(
+                        booking.getRoomType().getId(),
+                        booking.getCheckInDate(),
+                        booking.getCheckOutDate());
+
+                if (!availableRooms.isEmpty()) {
+                    assignedRoom = availableRooms.get(0);
+                    booking.setAssignedRoom(assignedRoom);
+                    log.info("Auto-assigned room {} to booking {}",
+                            assignedRoom.getRoomNumber(), booking.getId());
+                }
+            }
+
+            // ✅ Update room status cho mọi trường hợp (cọc hay full payment)
+            if (assignedRoom != null) {
+                assignedRoom.setStatus("Đã đặt");
+                roomRepository.save(assignedRoom);
+                log.info("Updated room {} status to 'Đã đặt' after payment for booking {}",
+                        assignedRoom.getRoomNumber(), booking.getId());
+            }
+            handlePaymentByType(booking,latestPayment);
+            bookingRepository.save(booking);
+            log.info("Booking {} đã được confirm tự động sau khi thanh toán thành công", bookingId);
 
         } catch (Exception e) {
-            log.error("Lỗi khi xử lý payment success cho booking {}", event.getBookingId(), e);
+            log.error("Lỗi khi confirm booking {} sau payment success", event.getBookingId(), e);
         }
     }
 
